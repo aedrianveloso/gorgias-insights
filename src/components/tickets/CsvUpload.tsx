@@ -118,6 +118,13 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
     const resolutionMinutes = resolutionSec ? Math.round(parseInt(resolutionSec) / 60) : null;
     const satisfaction = surveyScore ? parseFloat(surveyScore) : null;
 
+    // Gorgias metadata fields
+    const customerName = get("customer_name") || null;
+    const contactReason = get("ticket_field:_contact_reason", "contact_reason") || null;
+    const aiIntent = get("ticket_field:_ai_intent", "ai_intent") || null;
+    const productCategory = get("ticket_field:_product", "product_category", "product") || null;
+    const ticketUrl = get("ticket_url") || null;
+
     return {
       subject,
       status: status.toLowerCase(),
@@ -132,6 +139,11 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
       satisfaction_score: isNaN(satisfaction as number) ? null : satisfaction,
       messages_count: parseInt(agentMessages || "1") || 1,
       tags: tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean) : [],
+      customer_name: customerName,
+      contact_reason: contactReason,
+      ai_intent: aiIntent,
+      product_category: productCategory,
+      ticket_url: ticketUrl,
     };
   };
 

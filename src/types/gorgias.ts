@@ -13,6 +13,12 @@ export interface Ticket {
   satisfaction_score: number | null;
   tags: string[];
   messages_count: number;
+  // Gorgias-specific metadata
+  customer_name: string | null;
+  contact_reason: string | null;
+  ai_intent: string | null;
+  product_category: string | null;
+  ticket_url: string | null;
 }
 
 export interface DashboardStats {
