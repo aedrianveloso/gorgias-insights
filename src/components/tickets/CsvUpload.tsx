@@ -93,16 +93,37 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
     const priority = get("priority") || "normal";
     const createdAt = get("creation_date", "created_at", "created", "date") || new Date().toISOString();
     const closedAt = get("closed_date", "closed_at", "closed") || null;
-    const assigneeName = get("assignee_name", "assignee", "agent") || null;
+    const rawAssignee = get("assignee_name", "assignee", "agent") || null;
     const customerEmail = get("customer_email", "customer", "email") || null;
     const tags = get("tags");
     const surveyScore = get("survey_score", "satisfaction_score", "csat");
     const createdByAgent = get("created_by_an_agent");
 
+    // Validate assignee name - filter out dates, numbers, subjects that got misaligned
+    const isValidName = (name: string | null): boolean => {
+      if (!name) return false;
+      // Reject if it looks like a date (starts with 20xx-)
+      if (/^\d{4}-\d{2}/.test(name)) return false;
+      // Reject if it's just a number
+      if (/^\d+$/.test(name)) return false;
+      // Reject if it contains @ (email)
+      if (name.includes("@")) return false;
+      // Reject if it's too long (probably a subject line)
+      if (name.length > 40) return false;
+      // Reject if it starts with "Re:" or "Fwd:" (subject line)
+      if (/^(re:|fwd:|fw:)/i.test(name)) return false;
+      return true;
+    };
+    const assigneeName = isValidName(rawAssignee) ? rawAssignee : null;
+
     // Response time: Gorgias exports in seconds, convert to minutes
     const firstResponseSec = get("first_response_time_(s)", "first_response_time_(seconds)", "response_time_minutes", "response_time");
     const resolutionSec = get("resolution_time_(s)", "resolution_time_(seconds)", "resolution_time_minutes", "resolution_time");
     const agentMessages = get("number_of_agent_messages", "messages_count", "messages");
+
+    // Validate satisfaction score - should be between 0 and 5
+    const rawSatisfaction = surveyScore ? parseFloat(surveyScore) : null;
+    const validSatisfaction = rawSatisfaction !== null && !isNaN(rawSatisfaction) && rawSatisfaction >= 0 && rawSatisfaction <= 5 ? rawSatisfaction : null;
 
     // Determine status from closed_date
     let status = get("status");
@@ -116,7 +137,6 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
 
     const responseMinutes = firstResponseSec ? Math.round(parseInt(firstResponseSec) / 60) : null;
     const resolutionMinutes = resolutionSec ? Math.round(parseInt(resolutionSec) / 60) : null;
-    const satisfaction = surveyScore ? parseFloat(surveyScore) : null;
 
     // Gorgias metadata fields
     const customerName = get("customer_name") || null;
@@ -134,9 +154,9 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
       closed_at: closedAt,
       assignee_name: assigneeName,
       customer_email: customerEmail,
-      response_time_minutes: isNaN(responseMinutes as number) ? null : responseMinutes,
-      resolution_time_minutes: isNaN(resolutionMinutes as number) ? null : resolutionMinutes,
-      satisfaction_score: isNaN(satisfaction as number) ? null : satisfaction,
+      response_time_minutes: responseMinutes !== null && !isNaN(responseMinutes) && responseMinutes >= 0 && responseMinutes < 525600 ? responseMinutes : null,
+      resolution_time_minutes: resolutionMinutes !== null && !isNaN(resolutionMinutes) && resolutionMinutes >= 0 && resolutionMinutes < 525600 ? resolutionMinutes : null,
+      satisfaction_score: validSatisfaction,
       messages_count: parseInt(agentMessages || "1") || 1,
       tags: tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean) : [],
       customer_name: customerName,
