@@ -1,9 +1,10 @@
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 import type { Ticket, DashboardStats } from "@/types/gorgias";
 
 // ─── Tickets ────────────────────────────────────────────
 
 export async function getTickets(): Promise<Ticket[]> {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("tickets")
     .select("*")
@@ -14,6 +15,7 @@ export async function getTickets(): Promise<Ticket[]> {
 }
 
 export async function addTicket(ticket: Omit<Ticket, "id">) {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("tickets")
     .insert(ticket)
@@ -25,6 +27,7 @@ export async function addTicket(ticket: Omit<Ticket, "id">) {
 }
 
 export async function addTicketsBatch(tickets: Omit<Ticket, "id">[]) {
+  const supabase = getSupabase();
   const { data, error } = await supabase
     .from("tickets")
     .insert(tickets)
@@ -35,6 +38,7 @@ export async function addTicketsBatch(tickets: Omit<Ticket, "id">[]) {
 }
 
 export async function deleteTicket(id: number) {
+  const supabase = getSupabase();
   const { error } = await supabase.from("tickets").delete().eq("id", id);
   if (error) throw error;
 }
@@ -42,6 +46,7 @@ export async function deleteTicket(id: number) {
 // ─── Dashboard Stats ────────────────────────────────────
 
 export async function getDashboardStats(): Promise<DashboardStats> {
+  const supabase = getSupabase();
   const { data: tickets, error } = await supabase
     .from("tickets")
     .select("*");
