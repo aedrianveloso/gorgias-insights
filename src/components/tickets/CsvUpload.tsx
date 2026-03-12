@@ -12,43 +12,126 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
   const [fileName, setFileName] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Proper CSV parser that handles quoted fields with commas
   const parseCsv = (text: string): Record<string, string>[] => {
-    const lines = text.trim().split("\n");
+    const lines: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === '"') {
+        if (inQuotes && text[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === "\n" && !inQuotes) {
+        lines.push(current);
+        current = "";
+      } else if (char === "\r" && !inQuotes) {
+        // skip \r
+      } else {
+        current += char;
+      }
+    }
+    if (current.trim()) lines.push(current);
+
     if (lines.length < 2) return [];
 
-    const headers = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/\s+/g, "_"));
+    const headers = splitCsvLine(lines[0]).map((h) =>
+      h.trim().toLowerCase().replace(/\s+/g, "_")
+    );
 
     return lines.slice(1).map((line) => {
-      const values = line.split(",").map((v) => v.trim());
+      const values = splitCsvLine(line);
       const row: Record<string, string> = {};
       headers.forEach((header, i) => {
-        row[header] = values[i] || "";
+        row[header] = (values[i] || "").trim();
       });
       return row;
     });
   };
 
+  const splitCsvLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === "," && !inQuotes) {
+        result.push(current);
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    result.push(current);
+    return result;
+  };
+
   const mapToTicket = (row: Record<string, string>): Record<string, unknown> => {
+    // Get value by trying multiple possible column names
+    const get = (...keys: string[]): string => {
+      for (const key of keys) {
+        if (row[key] && row[key].trim()) return row[key].trim();
+      }
+      return "";
+    };
+
+    const subject = get("subject", "title", "ticket_subject") || "Untitled";
+    const channel = get("initial_channel", "channel", "source") || "email";
+    const priority = get("priority") || "normal";
+    const createdAt = get("creation_date", "created_at", "created", "date") || new Date().toISOString();
+    const closedAt = get("closed_date", "closed_at", "closed") || null;
+    const assigneeName = get("assignee_name", "assignee", "agent") || null;
+    const customerEmail = get("customer_email", "customer", "email") || null;
+    const tags = get("tags");
+    const surveyScore = get("survey_score", "satisfaction_score", "csat");
+    const createdByAgent = get("created_by_an_agent");
+
+    // Response time: Gorgias exports in seconds, convert to minutes
+    const firstResponseSec = get("first_response_time_(s)", "first_response_time_(seconds)", "response_time_minutes", "response_time");
+    const resolutionSec = get("resolution_time_(s)", "resolution_time_(seconds)", "resolution_time_minutes", "resolution_time");
+    const agentMessages = get("number_of_agent_messages", "messages_count", "messages");
+
+    // Determine status from closed_date
+    let status = get("status");
+    if (!status) {
+      if (closedAt) {
+        status = "closed";
+      } else {
+        status = "open";
+      }
+    }
+
+    const responseMinutes = firstResponseSec ? Math.round(parseInt(firstResponseSec) / 60) : null;
+    const resolutionMinutes = resolutionSec ? Math.round(parseInt(resolutionSec) / 60) : null;
+    const satisfaction = surveyScore ? parseFloat(surveyScore) : null;
+
     return {
-      subject: row.subject || row.title || row.ticket_subject || "Untitled",
-      status: (row.status || "open").toLowerCase(),
-      priority: (row.priority || "normal").toLowerCase(),
-      channel: (row.channel || row.source || "email").toLowerCase(),
-      created_at: row.created_at || row.created || row.date || new Date().toISOString(),
-      closed_at: row.closed_at || row.closed || null,
-      assignee_name: row.assignee_name || row.assignee || row.agent || null,
-      customer_email: row.customer_email || row.customer || row.email || null,
-      response_time_minutes: row.response_time_minutes || row.response_time
-        ? parseInt(row.response_time_minutes || row.response_time)
-        : null,
-      resolution_time_minutes: row.resolution_time_minutes || row.resolution_time
-        ? parseInt(row.resolution_time_minutes || row.resolution_time)
-        : null,
-      satisfaction_score: row.satisfaction_score || row.csat
-        ? parseFloat(row.satisfaction_score || row.csat)
-        : null,
-      messages_count: parseInt(row.messages_count || row.messages || "1") || 1,
-      tags: [],
+      subject,
+      status: status.toLowerCase(),
+      priority: priority.toLowerCase(),
+      channel: channel.toLowerCase(),
+      created_at: createdAt,
+      closed_at: closedAt,
+      assignee_name: assigneeName,
+      customer_email: customerEmail,
+      response_time_minutes: isNaN(responseMinutes as number) ? null : responseMinutes,
+      resolution_time_minutes: isNaN(resolutionMinutes as number) ? null : resolutionMinutes,
+      satisfaction_score: isNaN(satisfaction as number) ? null : satisfaction,
+      messages_count: parseInt(agentMessages || "1") || 1,
+      tags: tags ? tags.split(",").map((t: string) => t.trim()).filter(Boolean) : [],
     };
   };
 
@@ -97,11 +180,11 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
         <label htmlFor="csv-upload" className="cursor-pointer">
           <div className="text-4xl mb-2">📄</div>
           <p className="text-gray-600 font-medium">
-            {fileName || "Click to upload a CSV file"}
+            {fileName || "Click to upload a Gorgias CSV export"}
           </p>
           <p className="text-gray-400 text-sm mt-1">
-            Columns: subject, status, priority, channel, created_at, assignee_name, customer_email,
-            response_time_minutes, satisfaction_score
+            Supports Gorgias ticket exports with columns like Subject, Tags, Initial channel,
+            Creation date, Assignee name, Customer email, etc.
           </p>
         </label>
       </div>
@@ -115,7 +198,7 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b">
-                  {Object.keys(preview[0]).map((key) => (
+                  {Object.keys(preview[0]).slice(0, 8).map((key) => (
                     <th key={key} className="text-left p-2 text-gray-500">
                       {key}
                     </th>
@@ -125,7 +208,7 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
               <tbody>
                 {preview.map((row, i) => (
                   <tr key={i} className="border-b border-gray-50">
-                    {Object.values(row).map((val, j) => (
+                    {Object.values(row).slice(0, 8).map((val, j) => (
                       <td key={j} className="p-2 text-gray-600 max-w-[150px] truncate">
                         {val}
                       </td>
