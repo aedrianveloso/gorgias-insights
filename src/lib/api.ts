@@ -1,59 +1,71 @@
-import { getSupabase } from "./supabase";
 import type { Ticket, DashboardStats } from "@/types/gorgias";
+
+// ─── localStorage Storage ──────────────────────────────
+
+const STORAGE_KEY = "gorgias_tickets";
+
+function getStoredTickets(): Ticket[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTickets(tickets: Ticket[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
+}
+
+let nextId = 0;
+
+function getNextId(): number {
+  const tickets = getStoredTickets();
+  const maxId = tickets.reduce((max, t) => Math.max(max, t.id), 0);
+  nextId = Math.max(nextId, maxId) + 1;
+  return nextId;
+}
 
 // ─── Tickets ────────────────────────────────────────────
 
 export async function getTickets(): Promise<Ticket[]> {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("tickets")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return data ?? [];
+  const tickets = getStoredTickets();
+  return tickets.sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 }
 
-export async function addTicket(ticket: Omit<Ticket, "id">) {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("tickets")
-    .insert(ticket)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+export async function addTicket(ticket: Omit<Ticket, "id">): Promise<Ticket> {
+  const tickets = getStoredTickets();
+  const newTicket: Ticket = { ...ticket, id: getNextId() };
+  tickets.push(newTicket);
+  saveTickets(tickets);
+  return newTicket;
 }
 
-export async function addTicketsBatch(tickets: Omit<Ticket, "id">[]) {
-  const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from("tickets")
-    .insert(tickets)
-    .select();
-
-  if (error) throw error;
-  return data;
+export async function addTicketsBatch(newTickets: Omit<Ticket, "id">[]): Promise<Ticket[]> {
+  const tickets = getStoredTickets();
+  const created: Ticket[] = newTickets.map((t) => ({
+    ...t,
+    id: getNextId(),
+  }));
+  tickets.push(...created);
+  saveTickets(tickets);
+  return created;
 }
 
 export async function deleteTicket(id: number) {
-  const supabase = getSupabase();
-  const { error } = await supabase.from("tickets").delete().eq("id", id);
-  if (error) throw error;
+  const tickets = getStoredTickets();
+  const filtered = tickets.filter((t) => t.id !== id);
+  saveTickets(filtered);
 }
 
 // ─── Dashboard Stats ────────────────────────────────────
 
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const supabase = getSupabase();
-  const { data: tickets, error } = await supabase
-    .from("tickets")
-    .select("*");
-
-  if (error) throw error;
-
-  const all = tickets ?? [];
+  const all = getStoredTickets();
 
   const totalTickets = all.length;
   const openTickets = all.filter((t) => t.status === "open").length;

@@ -71,17 +71,13 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
 
     setLoading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const text = event.target?.result as string;
-        const rows = parseCsv(text);
-        const tickets = rows.map(mapToTicket);
-        await onUpload(tickets);
-        setPreview([]);
-        setFileName("");
-        if (fileRef.current) fileRef.current.value = "";
-      };
-      reader.readAsText(fileRef.current.files[0]);
+      const text = await fileRef.current.files[0].text();
+      const rows = parseCsv(text);
+      const tickets = rows.map(mapToTicket);
+      await onUpload(tickets);
+      setPreview([]);
+      setFileName("");
+      if (fileRef.current) fileRef.current.value = "";
     } finally {
       setLoading(false);
     }
