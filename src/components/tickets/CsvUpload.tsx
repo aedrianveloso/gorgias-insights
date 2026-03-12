@@ -44,8 +44,25 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
       h.trim().toLowerCase().replace(/\s+/g, "_")
     );
 
+    // Find the index of the "tags" column to handle unquoted commas
+    const tagsIndex = headers.indexOf("tags");
+
     return lines.slice(1).map((line) => {
-      const values = splitCsvLine(line);
+      let values = splitCsvLine(line);
+
+      // If row has more values than headers, the Tags field had unquoted commas
+      // Merge the extra values back into the Tags field
+      if (values.length > headers.length && tagsIndex >= 0) {
+        const extraCount = values.length - headers.length;
+        const tagParts = values.slice(tagsIndex, tagsIndex + 1 + extraCount);
+        const mergedTags = tagParts.join(",");
+        values = [
+          ...values.slice(0, tagsIndex),
+          mergedTags,
+          ...values.slice(tagsIndex + 1 + extraCount),
+        ];
+      }
+
       const row: Record<string, string> = {};
       headers.forEach((header, i) => {
         row[header] = (values[i] || "").trim();
