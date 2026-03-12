@@ -99,19 +99,15 @@ export default function CsvUpload({ onUpload }: CsvUploadProps) {
     const surveyScore = get("survey_score", "satisfaction_score", "csat");
     const createdByAgent = get("created_by_an_agent");
 
-    // Validate assignee name - filter out dates, numbers, subjects that got misaligned
+    // Validate assignee name - must look like a real person's name
     const isValidName = (name: string | null): boolean => {
       if (!name) return false;
-      // Reject if it looks like a date (starts with 20xx-)
-      if (/^\d{4}-\d{2}/.test(name)) return false;
-      // Reject if it's just a number
-      if (/^\d+$/.test(name)) return false;
-      // Reject if it contains @ (email)
-      if (name.includes("@")) return false;
-      // Reject if it's too long (probably a subject line)
-      if (name.length > 40) return false;
-      // Reject if it starts with "Re:" or "Fwd:" (subject line)
-      if (/^(re:|fwd:|fw:)/i.test(name)) return false;
+      // Must only contain letters, spaces, periods, hyphens, and apostrophes
+      if (!/^[a-zA-Z][a-zA-Z\s.\-']+$/.test(name)) return false;
+      // Must be reasonable length (2-40 chars)
+      if (name.length < 2 || name.length > 40) return false;
+      // Must contain at least one space or period (first + last name or initial)
+      if (!/[\s.]/.test(name)) return false;
       return true;
     };
     const assigneeName = isValidName(rawAssignee) ? rawAssignee : null;
