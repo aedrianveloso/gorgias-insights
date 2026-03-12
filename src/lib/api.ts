@@ -62,6 +62,10 @@ export async function deleteTicket(id: number) {
   saveTickets(filtered);
 }
 
+export async function clearAllTickets() {
+  saveTickets([]);
+}
+
 // ─── Dashboard Stats ────────────────────────────────────
 
 export async function getDashboardStats(): Promise<DashboardStats> {

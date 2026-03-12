@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import TicketForm from "@/components/tickets/TicketForm";
 import CsvUpload from "@/components/tickets/CsvUpload";
-import { getTickets, addTicket, addTicketsBatch, deleteTicket } from "@/lib/api";
+import { getTickets, addTicket, addTicketsBatch, deleteTicket, clearAllTickets } from "@/lib/api";
 import type { Ticket } from "@/types/gorgias";
 
 export default function TicketsPage() {
@@ -134,9 +134,25 @@ export default function TicketsPage() {
 
       {/* Tickets List */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          All Tickets ({tickets.length})
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            All Tickets ({tickets.length})
+          </h3>
+          {tickets.length > 0 && (
+            <button
+              onClick={async () => {
+                if (confirm("Clear all ticket data? This cannot be undone.")) {
+                  await clearAllTickets();
+                  setTickets([]);
+                  setMessage({ type: "success", text: "All tickets cleared." });
+                }
+              }}
+              className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+            >
+              Clear All Data
+            </button>
+          )}
+        </div>
 
         {loading ? (
           <div className="text-center py-8 text-gray-400">Loading tickets...</div>
