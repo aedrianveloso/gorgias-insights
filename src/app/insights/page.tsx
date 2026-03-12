@@ -2,6 +2,7 @@
 
 import { useTickets } from "@/lib/ticket-store";
 import Link from "next/link";
+import TicketDrillDown from "@/components/tickets/TicketDrillDown";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -89,6 +90,10 @@ export default function InsightsPage() {
                     ))}
                   </div>
                 )}
+                <TicketDrillDown
+                  tickets={tickets.filter(t => intent.ticketIds.includes(t.id))}
+                  label="tickets"
+                />
               </div>
             ))}
           </div>
@@ -118,6 +123,10 @@ export default function InsightsPage() {
                     ))}
                   </div>
                 )}
+                <TicketDrillDown
+                  tickets={tickets.filter(t => reason.ticketIds.includes(t.id))}
+                  label="tickets"
+                />
               </div>
             ))}
           </div>
@@ -147,6 +156,10 @@ export default function InsightsPage() {
                     </div>
                   ))}
                 </div>
+                <TicketDrillDown
+                  tickets={tickets.filter(t => product.ticketIds.includes(t.id))}
+                  label="tickets"
+                />
               </div>
             ))}
           </div>
@@ -172,6 +185,15 @@ export default function InsightsPage() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
               </PieChart>
             </ResponsiveContainer>
+            <div className="mt-4 space-y-2">
+              {a.emailInsights.sentimentDistribution.map((s) => (
+                <TicketDrillDown
+                  key={s.sentiment}
+                  tickets={tickets.filter(t => s.ticketIds.includes(t.id))}
+                  label={`${s.sentiment} tickets`}
+                />
+              ))}
+            </div>
           </div>
         )}
 

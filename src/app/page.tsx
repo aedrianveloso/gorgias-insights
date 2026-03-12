@@ -2,6 +2,7 @@
 
 import { useTickets } from "@/lib/ticket-store";
 import Link from "next/link";
+import TicketDrillDown from "@/components/tickets/TicketDrillDown";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell, Legend,
@@ -117,6 +118,15 @@ export default function Dashboard() {
               <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Tickets" />
             </BarChart>
           </ResponsiveContainer>
+          <div className="mt-4 space-y-2">
+            {a.intentBreakdown.slice(0, 5).map((intent) => (
+              <TicketDrillDown
+                key={intent.category}
+                tickets={tickets.filter(t => intent.ticketIds.includes(t.id))}
+                label={`${intent.category} tickets`}
+              />
+            ))}
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -131,6 +141,15 @@ export default function Dashboard() {
               <Bar dataKey="count" fill="#10b981" radius={[0, 4, 4, 0]} name="Tickets" />
             </BarChart>
           </ResponsiveContainer>
+          <div className="mt-4 space-y-2">
+            {a.contactReasonBreakdown.slice(0, 5).map((reason) => (
+              <TicketDrillDown
+                key={reason.reason}
+                tickets={tickets.filter(t => reason.ticketIds.includes(t.id))}
+                label={`${reason.reason} tickets`}
+              />
+            ))}
+          </div>
         </div>
       </div>
 

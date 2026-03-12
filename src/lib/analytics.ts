@@ -126,26 +126,32 @@ function computeChannelBreakdown(tickets: GorgiasTicket[]) {
 
 function computeIntentBreakdown(tickets: GorgiasTicket[]): IntentBreakdown[] {
   const total = tickets.length;
-  const map = new Map<string, Map<string, number>>();
+  const map = new Map<string, Map<string, number[]>>();
 
   tickets.forEach((t) => {
     const cat = t.intentCategory || "Unknown";
     if (!map.has(cat)) map.set(cat, new Map());
     const sub = t.intentSubCategory || "Other";
     const subMap = map.get(cat)!;
-    subMap.set(sub, (subMap.get(sub) || 0) + 1);
+    if (!subMap.has(sub)) subMap.set(sub, []);
+    subMap.get(sub)!.push(t.id);
   });
 
   return Array.from(map.entries())
     .map(([category, subMap]) => {
-      const count = Array.from(subMap.values()).reduce((s, v) => s + v, 0);
+      const allIds: number[] = [];
+      const subCategories = Array.from(subMap.entries())
+        .map(([name, ids]) => {
+          allIds.push(...ids);
+          return { name, count: ids.length, ticketIds: ids };
+        })
+        .sort((a, b) => b.count - a.count);
       return {
         category,
-        count,
-        percentage: parseFloat(((count / total) * 100).toFixed(1)),
-        subCategories: Array.from(subMap.entries())
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count),
+        count: allIds.length,
+        percentage: parseFloat(((allIds.length / total) * 100).toFixed(1)),
+        ticketIds: allIds,
+        subCategories,
       };
     })
     .sort((a, b) => b.count - a.count);
@@ -155,26 +161,32 @@ function computeIntentBreakdown(tickets: GorgiasTicket[]): IntentBreakdown[] {
 
 function computeContactReasonBreakdown(tickets: GorgiasTicket[]): ContactReasonBreakdown[] {
   const total = tickets.length;
-  const map = new Map<string, Map<string, number>>();
+  const map = new Map<string, Map<string, number[]>>();
 
   tickets.forEach((t) => {
     const reason = t.contactCategory || "Unknown";
     if (!map.has(reason)) map.set(reason, new Map());
     const detail = t.contactDetail || "Other";
     const detailMap = map.get(reason)!;
-    detailMap.set(detail, (detailMap.get(detail) || 0) + 1);
+    if (!detailMap.has(detail)) detailMap.set(detail, []);
+    detailMap.get(detail)!.push(t.id);
   });
 
   return Array.from(map.entries())
     .map(([reason, detailMap]) => {
-      const count = Array.from(detailMap.values()).reduce((s, v) => s + v, 0);
+      const allIds: number[] = [];
+      const details = Array.from(detailMap.entries())
+        .map(([name, ids]) => {
+          allIds.push(...ids);
+          return { name, count: ids.length, ticketIds: ids };
+        })
+        .sort((a, b) => b.count - a.count);
       return {
         reason,
-        count,
-        percentage: parseFloat(((count / total) * 100).toFixed(1)),
-        details: Array.from(detailMap.entries())
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count),
+        count: allIds.length,
+        percentage: parseFloat(((allIds.length / total) * 100).toFixed(1)),
+        ticketIds: allIds,
+        details,
       };
     })
     .sort((a, b) => b.count - a.count);
@@ -210,6 +222,7 @@ function computeProductInsights(tickets: GorgiasTicket[]): ProductInsight[] {
       return {
         product,
         totalTickets: data.tickets.length,
+        ticketIds: data.tickets.map((t) => t.id),
         topIssues: Array.from(issueMap.entries())
           .map(([issue, count]) => ({ issue, count }))
           .sort((a, b) => b.count - a.count)
@@ -294,22 +307,36 @@ function computeAgentQuality(tickets: GorgiasTicket[]): AgentQuality[] {
 // ─── Email body insights ────────────────────────────────
 
 const STOP_WORDS = new Set([
-  "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-  "have", "has", "had", "do", "does", "did", "will", "would", "could",
-  "should", "may", "might", "shall", "can", "need", "must", "to", "of",
-  "in", "for", "on", "with", "at", "by", "from", "as", "into", "about",
-  "like", "through", "after", "over", "between", "out", "against", "during",
-  "and", "but", "or", "nor", "not", "so", "yet", "both", "either", "neither",
-  "this", "that", "these", "those", "it", "its", "i", "me", "my", "we", "our",
-  "you", "your", "he", "she", "they", "them", "his", "her", "their", "what",
-  "which", "who", "whom", "where", "when", "why", "how", "all", "each",
-  "every", "any", "some", "no", "just", "very", "also", "if", "then",
-  "than", "too", "up", "down", "here", "there", "am", "get", "got",
-  "hi", "hello", "thanks", "thank", "please", "caution", "email",
-  "originated", "outside", "organization", "click", "links", "open",
-  "attachments", "unless", "recognize", "sender", "know", "content",
-  "safe", "received", "new", "message", "online", "store", "contact",
-  "form", "country", "code", "name", "us", "de", "re", "set", "one",
+  // Common English
+  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of",
+  "with", "by", "from", "as", "is", "was", "are", "were", "been", "be", "have",
+  "has", "had", "do", "does", "did", "will", "would", "could", "should", "may",
+  "might", "shall", "can", "need", "must", "not", "no", "nor", "so", "if",
+  "then", "than", "too", "very", "just", "about", "above", "after", "again",
+  "all", "also", "am", "any", "because", "before", "between", "both", "each",
+  "few", "further", "get", "got", "here", "how", "i", "im", "into", "it",
+  "its", "itself", "let", "like", "me", "more", "most", "my", "myself", "now",
+  "only", "other", "our", "out", "over", "own", "re", "same", "she", "some",
+  "such", "that", "their", "them", "there", "these", "they", "this", "those",
+  "through", "under", "until", "up", "we", "what", "when", "where", "which",
+  "while", "who", "whom", "why", "you", "your", "yours", "he", "her", "him",
+  "his", "us", "being", "doing", "having", "during", "once", "s", "t", "d",
+  "ll", "ve", "m", "don", "doesn", "didn", "won", "wouldn", "couldn",
+  "shouldn", "isn", "aren", "wasn", "weren", "hasn", "haven", "hadn",
+  "every", "either", "neither", "yet", "down", "against", "open",
+  // Email-specific noise
+  "caution", "email", "originated", "organization", "click", "links",
+  "attachments", "sender", "sent", "received", "reply", "forwarded",
+  "subject", "message", "wrote", "please", "thank", "thanks", "hi", "hello",
+  "hey", "dear", "regards", "sincerely", "best", "cheers", "mailto", "http",
+  "https", "www", "com", "org", "net", "unsubscribe", "subscribe", "view",
+  "browser", "privacy", "policy", "terms", "conditions", "rights", "reserved",
+  "copyright", "confidential", "intended", "recipient", "notify", "delete",
+  "disclaimer", "image", "images", "logo", "outside", "know", "content",
+  "safely", "report", "suspicious", "contained", "within", "verified",
+  "unknown", "display", "blocked", "warning", "recognize", "safe", "new",
+  "online", "store", "contact", "form", "country", "code", "name", "de",
+  "set", "one", "unless",
 ]);
 
 function extractKeywords(text: string): string[] {
@@ -317,7 +344,7 @@ function extractKeywords(text: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+    .filter((w) => w.length > 2 && !STOP_WORDS.has(w));
 }
 
 function computeEmailInsights(tickets: GorgiasTicket[]): EmailInsight {
@@ -349,20 +376,24 @@ function computeEmailInsights(tickets: GorgiasTicket[]): EmailInsight {
     { pattern: /color|colour/i, label: "Color preference / question" },
     { pattern: /quality|defect|damaged|broken|torn/i, label: "Quality / defect issue" },
     { pattern: /wash|care|clean|maintain/i, label: "Care instructions" },
-    { pattern: /thread count|material|fabric|cotton|egyptian/i, label: "Material / fabric question" },
-    { pattern: /pillow/i, label: "Pillow related" },
-    { pattern: /sheet|bedding/i, label: "Sheet / bedding related" },
-    { pattern: /towel/i, label: "Towel related" },
+    { pattern: /thread count|material|fabric|cotton|egyptian|percale|sateen/i, label: "Material / fabric question" },
+    { pattern: /pillow|euro sham/i, label: "Pillow related" },
+    { pattern: /sheet|bedding|fitted|flat sheet/i, label: "Sheet / bedding related" },
+    { pattern: /towel|bath sheet|washcloth/i, label: "Towel / bath related" },
+    { pattern: /duvet|comforter|quilt|coverlet/i, label: "Duvet / comforter related" },
+    { pattern: /mattress|mattress pad|mattress protector|topper/i, label: "Mattress protector / pad" },
+    { pattern: /bath mat|bath rug/i, label: "Bath mat related" },
     { pattern: /warranty|guarantee/i, label: "Warranty inquiry" },
     { pattern: /order\s*#?\s*\d+/i, label: "Order number referenced" },
   ];
 
-  const requestCounts = new Map<string, { count: number; examples: string[] }>();
+  const requestCounts = new Map<string, { count: number; examples: string[]; ticketIds: number[] }>();
   withBody.forEach((t) => {
     requestPatterns.forEach(({ pattern, label }) => {
       if (pattern.test(t.emailBody)) {
-        const entry = requestCounts.get(label) || { count: 0, examples: [] };
+        const entry = requestCounts.get(label) || { count: 0, examples: [], ticketIds: [] };
         entry.count++;
+        entry.ticketIds.push(t.id);
         if (entry.examples.length < 2) {
           const snippet = t.emailBody.substring(0, 150).replace(/\n/g, " ");
           entry.examples.push(snippet);
@@ -373,43 +404,68 @@ function computeEmailInsights(tickets: GorgiasTicket[]): EmailInsight {
   });
 
   const topCustomerRequests = Array.from(requestCounts.entries())
-    .map(([request, data]) => ({ request, count: data.count, examples: data.examples }))
+    .map(([request, data]) => ({ request, count: data.count, examples: data.examples, ticketIds: data.ticketIds }))
     .sort((a, b) => b.count - a.count);
 
-  // Product mentions in email bodies
-  const productKeywords = [
-    "sheet", "sheets", "pillow", "pillowcase", "towel", "towels",
-    "blanket", "comforter", "duvet", "mattress", "bath", "washcloth",
-    "egyptian cotton", "supreme", "dreamzone", "wamsutta",
+  // Product mentions in email bodies — mapped to actual Wamsutta catalog
+  const productCategories: { label: string; keywords: string[] }[] = [
+    { label: "Sheet Sets", keywords: ["sheet", "sheets", "sheet set", "fitted sheet", "flat sheet"] },
+    { label: "Pillowcase Sets", keywords: ["pillowcase", "pillow case", "pillowcases"] },
+    { label: "Duvet Sets", keywords: ["duvet", "duvet cover", "duvet set"] },
+    { label: "Comforter Sets", keywords: ["comforter", "comforter set"] },
+    { label: "Quilts & Coverlets", keywords: ["quilt", "coverlet"] },
+    { label: "Pillows", keywords: ["pillow", "down alternative pillow", "euro pillow", "latex loft", "bed pillow"] },
+    { label: "Euro Shams & Decorative Pillows", keywords: ["euro sham", "decorative pillow", "throw pillow"] },
+    { label: "Bath Towels", keywords: ["bath towel", "towel", "towels"] },
+    { label: "Bath Sheets", keywords: ["bath sheet", "bath sheets"] },
+    { label: "Hand Towels & Washcloths", keywords: ["hand towel", "washcloth", "wash cloth", "hand towels"] },
+    { label: "Bath Mats & Tubmats", keywords: ["bath mat", "bath rug", "bath mats", "tubmat", "tub mat"] },
+    { label: "Mattress Protectors & Pads", keywords: ["mattress protector", "mattress pad", "mattress topper", "mattress", "pillowtop topper"] },
+    { label: "Supreme Egyptian Cotton", keywords: ["egyptian cotton", "supreme", "800 thread", "800tc"] },
+    { label: "Essentials Percale", keywords: ["percale", "essentials percale", "400tc percale"] },
+    { label: "Essentials Cotton Sateen", keywords: ["essentials cotton", "essentials sateen", "400tc sateen", "sateen solid"] },
+    { label: "Comforters (DA)", keywords: ["down alternative comforter", "all season comforter", "extra warmth", "light warmth"] },
+    { label: "Gramercy Collection", keywords: ["gramercy"] },
+    { label: "Soho Collection", keywords: ["soho"] },
+    { label: "Charleston Vine", keywords: ["charleston vine", "charleston"] },
+    { label: "Garden Toile", keywords: ["garden toile"] },
+    { label: "Herringbone Stitch", keywords: ["herringbone"] },
   ];
-  const productFreq = new Map<string, number>();
+  const productMentionMap = new Map<string, { count: number; ticketIds: number[] }>();
   withBody.forEach((t) => {
     const lower = t.emailBody.toLowerCase();
-    productKeywords.forEach((pk) => {
-      if (lower.includes(pk)) {
-        productFreq.set(pk, (productFreq.get(pk) || 0) + 1);
+    productCategories.forEach(({ label, keywords }) => {
+      if (keywords.some((kw) => lower.includes(kw))) {
+        const entry = productMentionMap.get(label) || { count: 0, ticketIds: [] };
+        entry.count++;
+        entry.ticketIds.push(t.id);
+        productMentionMap.set(label, entry);
       }
     });
   });
 
-  const productMentions = Array.from(productFreq.entries())
-    .map(([product, count]) => ({ product, count }))
+  const productMentions = Array.from(productMentionMap.entries())
+    .map(([product, data]) => ({ product, count: data.count, ticketIds: data.ticketIds }))
     .sort((a, b) => b.count - a.count);
 
   // Sentiment distribution
-  const sentMap = new Map<string, number>();
+  const sentMap = new Map<string, { count: number; ticketIds: number[] }>();
   tickets.forEach((t) => {
     const sent = t.managedSentiment || "Unknown";
     if (sent && sent.trim().length > 0) {
-      sentMap.set(sent, (sentMap.get(sent) || 0) + 1);
+      const entry = sentMap.get(sent) || { count: 0, ticketIds: [] };
+      entry.count++;
+      entry.ticketIds.push(t.id);
+      sentMap.set(sent, entry);
     }
   });
-  const sentTotal = Array.from(sentMap.values()).reduce((s, v) => s + v, 0) || 1;
+  const sentTotal = Array.from(sentMap.values()).reduce((s, v) => s + v.count, 0) || 1;
   const sentimentDistribution = Array.from(sentMap.entries())
-    .map(([sentiment, count]) => ({
+    .map(([sentiment, data]) => ({
       sentiment,
-      count,
-      percentage: parseFloat(((count / sentTotal) * 100).toFixed(1)),
+      count: data.count,
+      percentage: parseFloat(((data.count / sentTotal) * 100).toFixed(1)),
+      ticketIds: data.ticketIds,
     }))
     .sort((a, b) => b.count - a.count);
 
@@ -629,7 +685,7 @@ function formatDate(dateStr: string): string {
   }
 }
 
-function emptyAnalytics(): EnhancedAnalytics {
+export function emptyAnalytics(): EnhancedAnalytics {
   return {
     totalTickets: 0, closedTickets: 0, openTickets: 0,
     avgResponseTime: 0, avgResolutionTime: 0, satisfactionScore: 0,

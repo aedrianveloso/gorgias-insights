@@ -2,6 +2,7 @@
 
 import { useTickets } from "@/lib/ticket-store";
 import Link from "next/link";
+import TicketDrillDown from "@/components/tickets/TicketDrillDown";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function EmailAnalysisPage() {
@@ -67,6 +68,10 @@ export default function EmailAnalysisPage() {
                       &quot;{req.examples[0]}...&quot;
                     </p>
                   )}
+                  <TicketDrillDown
+                    tickets={tickets.filter(t => req.ticketIds.includes(t.id))}
+                    label="tickets"
+                  />
                 </div>
               ))}
             </div>
@@ -84,6 +89,10 @@ export default function EmailAnalysisPage() {
               <div key={pm.product} className="border rounded-lg p-3 text-center">
                 <p className="text-xl font-bold text-gray-900">{pm.count}</p>
                 <p className="text-xs text-gray-500 capitalize">{pm.product}</p>
+                <TicketDrillDown
+                  tickets={tickets.filter(t => pm.ticketIds.includes(t.id))}
+                  label="tickets"
+                />
               </div>
             ))}
           </div>
