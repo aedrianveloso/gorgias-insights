@@ -1,153 +1,274 @@
-import type { GorgiasTicket } from "@/types/gorgias";
+import { GorgiasTicket } from "../types/gorgias";
+
+// Column name variations for flexible matching
+const COLUMN_MAPPINGS: Record<string, string[]> = {
+  id: ["id", "ticket_id"],
+  ticketUrl: ["ticket_url", "url", "link"],
+  subject: ["subject", "title"],
+  status: ["status"],
+  channel: ["channel", "via"],
+  createdAt: ["created_at", "created", "date_created", "created_datetime"],
+  closedAt: ["closed_at", "closed", "closed_datetime"],
+  assigneeName: ["assignee_name", "assignee", "agent", "assigned_to"],
+  customerEmail: ["customer_email", "customer", "email", "requester_email"],
+  responseTimeMinutes: [
+    "first_response_time_minutes",
+    "response_time",
+    "response_time_minutes",
+    "first_response_time",
+  ],
+  resolutionTimeMinutes: [
+    "full_resolution_time_minutes",
+    "resolution_time",
+    "resolution_time_minutes",
+    "full_resolution_time",
+  ],
+  satisfactionScore: ["satisfaction_score", "csat", "satisfaction_rating", "csat_score"],
+  tags: ["tags", "labels"],
+  messagesCount: ["messages_count", "messages", "message_count"],
+  aiIntent: ["ticket_field:_ai_intent", "ai_intent", "intent"],
+  contactReason: ["ticket_field:_contact_reason", "contact_reason"],
+  product: ["ticket_field:_product", "product"],
+  resolution: ["ticket_field:_resolution", "resolution"],
+  managedSentiment: ["managed_sentiment", "sentiment", "ticket_field:_managed_sentiment"],
+  emailBody: ["email_body", "body", "message_body", "email_content"],
+};
 
 /**
- * Smart CSV parser that handles the actual Gorgias export format.
- * Handles quoted fields with commas, newlines inside quotes, etc.
+ * Parse CSV text that may contain quoted fields with commas, escaped quotes (""),
+ * and newlines inside quoted fields.
+ * Returns an array of string arrays (rows of fields).
  */
-export function parseGorgiasCsv(text: string): GorgiasTicket[] {
-  const { headers, rows } = parseCsvText(text);
-  return rows.map((row, idx) => mapRowToTicket(headers, row, idx));
-}
-
-function parseCsvText(text: string): { headers: string[]; rows: string[][] } {
+function parseCsvRows(csvText: string): string[][] {
   const rows: string[][] = [];
-  let current: string[] = [];
-  let field = "";
+  let currentField = "";
+  let currentRow: string[] = [];
   let inQuotes = false;
+  let i = 0;
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const next = text[i + 1];
+  while (i < csvText.length) {
+    const char = csvText[i];
 
     if (inQuotes) {
-      if (char === '"' && next === '"') {
-        field += '"';
-        i++; // skip escaped quote
-      } else if (char === '"') {
+      if (char === '"') {
+        // Check for escaped quote ""
+        if (i + 1 < csvText.length && csvText[i + 1] === '"') {
+          currentField += '"';
+          i += 2;
+          continue;
+        }
+        // End of quoted field
         inQuotes = false;
-      } else {
-        field += char;
+        i++;
+        continue;
       }
+      currentField += char;
+      i++;
     } else {
       if (char === '"') {
         inQuotes = true;
+        i++;
       } else if (char === ",") {
-        current.push(field.trim());
-        field = "";
-      } else if (char === "\n" || (char === "\r" && next === "\n")) {
-        current.push(field.trim());
-        if (current.some((c) => c.length > 0)) {
-          rows.push(current);
+        currentRow.push(currentField);
+        currentField = "";
+        i++;
+      } else if (char === "\r") {
+        // Handle \r\n or standalone \r
+        currentRow.push(currentField);
+        currentField = "";
+        if (currentRow.length > 0) {
+          rows.push(currentRow);
         }
-        current = [];
-        field = "";
-        if (char === "\r") i++; // skip \n after \r
+        currentRow = [];
+        if (i + 1 < csvText.length && csvText[i + 1] === "\n") {
+          i += 2;
+        } else {
+          i++;
+        }
+      } else if (char === "\n") {
+        currentRow.push(currentField);
+        currentField = "";
+        if (currentRow.length > 0) {
+          rows.push(currentRow);
+        }
+        currentRow = [];
+        i++;
       } else {
-        field += char;
+        currentField += char;
+        i++;
       }
     }
   }
 
-  // Last field/row
-  if (field.length > 0 || current.length > 0) {
-    current.push(field.trim());
-    if (current.some((c) => c.length > 0)) {
-      rows.push(current);
+  // Handle last field/row
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField);
+    if (currentRow.length > 0) {
+      rows.push(currentRow);
     }
   }
 
-  const headers = rows[0]?.map((h) => h.toLowerCase().replace(/\s+/g, "_")) || [];
-  return { headers, rows: rows.slice(1) };
+  return rows;
 }
 
-function findCol(headers: string[], ...candidates: string[]): number {
-  for (const c of candidates) {
-    const idx = headers.indexOf(c.toLowerCase().replace(/\s+/g, "_"));
-    if (idx !== -1) return idx;
+/**
+ * Build a mapping from our field names to CSV column indices.
+ * Case-insensitive, trims whitespace.
+ */
+function buildColumnMap(headers: string[]): Record<string, number> {
+  const normalizedHeaders = headers.map((h) => h.trim().toLowerCase());
+  const columnMap: Record<string, number> = {};
+
+  for (const [fieldName, variations] of Object.entries(COLUMN_MAPPINGS)) {
+    for (const variation of variations) {
+      const idx = normalizedHeaders.indexOf(variation.toLowerCase());
+      if (idx !== -1) {
+        columnMap[fieldName] = idx;
+        break;
+      }
+    }
   }
-  return -1;
+
+  return columnMap;
 }
 
-function get(row: string[], idx: number): string {
-  return idx >= 0 && idx < row.length ? row[idx] : "";
+/**
+ * Get a string value from a row by field name, using the column map.
+ */
+function getString(row: string[], columnMap: Record<string, number>, field: string): string {
+  const idx = columnMap[field];
+  if (idx === undefined || idx >= row.length) return "";
+  return (row[idx] || "").trim();
 }
 
-function parseIntent(aiIntent: string): { category: string; sub: string; detail: string } {
-  const parts = aiIntent.split("::").map((s) => s.trim());
+/**
+ * Get a numeric value from a row by field name.
+ */
+function getNumber(row: string[], columnMap: Record<string, number>, field: string): number {
+  const raw = getString(row, columnMap, field);
+  if (!raw) return 0;
+  const num = parseFloat(raw);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Parse AI Intent string like "Exchange::Request::Other" into category/subCategory/detail.
+ */
+function parseIntentParts(intent: string): {
+  intentCategory: string;
+  intentSubCategory: string;
+  intentDetail: string;
+} {
+  if (!intent) {
+    return { intentCategory: "", intentSubCategory: "", intentDetail: "" };
+  }
+  const parts = intent.split("::").map((p) => p.trim());
   return {
-    category: parts[0] || "Unknown",
-    sub: parts[1] || "Other",
-    detail: parts[2] || "Other",
+    intentCategory: parts[0] || "",
+    intentSubCategory: parts[1] || "",
+    intentDetail: parts[2] || "",
   };
 }
 
-function parseContactReason(reason: string): { category: string; detail: string } {
-  const parts = reason.split("::").map((s) => s.trim());
+/**
+ * Parse Contact Reason into category/detail (split on "::").
+ */
+function parseContactReasonParts(reason: string): {
+  contactCategory: string;
+  contactDetail: string;
+} {
+  if (!reason) {
+    return { contactCategory: "", contactDetail: "" };
+  }
+  const parts = reason.split("::").map((p) => p.trim());
   return {
-    category: parts[0] || "Unknown",
-    detail: parts[1] || parts[0] || "Other",
+    contactCategory: parts[0] || "",
+    contactDetail: parts.slice(1).join("::") || "",
   };
 }
 
-function mapRowToTicket(headers: string[], row: string[], idx: number): GorgiasTicket {
-  // Map columns flexibly
-  const urlIdx = findCol(headers, "ticket_url", "url", "ticket_link");
-  const bodyIdx = findCol(headers, "email_body", "body", "message", "email_content", "conversation");
-  const intentIdx = findCol(headers, "ticket_field:_ai_intent", "ai_intent", "intent");
-  const contactIdx = findCol(headers, "ticket_field:_contact_reason", "contact_reason", "reason");
-  const productIdx = findCol(headers, "ticket_field:_product", "product");
-  const resolutionIdx = findCol(headers, "ticket_field:_resolution", "resolution");
-  const sentimentIdx = findCol(headers, "ticket_field:_managed_sentiment", "managed_sentiment", "sentiment");
-  const discountIdx = findCol(headers, "ticket_field:_ai_agent_sales_discount", "ai_agent_sales_discount", "discount");
-  const subjectIdx = findCol(headers, "subject", "title", "ticket_subject");
-  const statusIdx = findCol(headers, "status", "ticket_status");
-  const priorityIdx = findCol(headers, "priority");
-  const channelIdx = findCol(headers, "channel", "source");
-  const createdIdx = findCol(headers, "created_at", "created", "date", "created_datetime");
-  const closedIdx = findCol(headers, "closed_at", "closed", "closed_datetime");
-  const assigneeIdx = findCol(headers, "assignee_name", "assignee", "agent", "assigned_to");
-  const emailIdx = findCol(headers, "customer_email", "customer", "email", "requester_email");
-  const responseIdx = findCol(headers, "response_time_minutes", "response_time", "first_response_time");
-  const resTimeIdx = findCol(headers, "resolution_time_minutes", "resolution_time");
-  const csatIdx = findCol(headers, "satisfaction_score", "csat", "score");
-  const msgCountIdx = findCol(headers, "messages_count", "messages", "message_count", "number_of_messages");
-  const tagsIdx = findCol(headers, "tags", "ticket_tags");
+/**
+ * Parse tags from a string. Supports comma-separated or semicolon-separated tags.
+ */
+function parseTags(raw: string): string[] {
+  if (!raw) return [];
+  // Try comma-separated first, then semicolon
+  const separator = raw.includes(";") ? ";" : ",";
+  return raw
+    .split(separator)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+}
 
-  const aiIntent = get(row, intentIdx);
-  const contactReason = get(row, contactIdx);
-  const { category: ic, sub: is, detail: id } = parseIntent(aiIntent);
-  const { category: cc, detail: cd } = parseContactReason(contactReason);
+/**
+ * Parse a Gorgias CSV export into GorgiasTicket[].
+ *
+ * Handles:
+ * - Quoted fields with commas inside
+ * - Escaped quotes ("")
+ * - Newlines inside quoted fields
+ * - Flexible column name matching (case-insensitive, multiple variations)
+ * - AI Intent parsing into category/subCategory/detail
+ * - Contact Reason parsing into category/detail
+ */
+export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fileName?: string } {
+  if (!csvText || !csvText.trim()) {
+    return { tickets: [] };
+  }
 
-  const tagsRaw = get(row, tagsIdx);
-  const tags = tagsRaw ? tagsRaw.split(/[,;|]/).map((t) => t.trim()).filter(Boolean) : [];
+  const rows = parseCsvRows(csvText);
+  if (rows.length < 2) {
+    return { tickets: [] };
+  }
 
-  return {
-    id: idx + 1,
-    ticketUrl: get(row, urlIdx),
-    emailBody: get(row, bodyIdx),
-    aiIntent,
-    contactReason,
-    product: get(row, productIdx),
-    resolution: get(row, resolutionIdx),
-    managedSentiment: get(row, sentimentIdx),
-    aiAgentSalesDiscount: get(row, discountIdx),
-    subject: get(row, subjectIdx) || "Untitled",
-    status: get(row, statusIdx) || "closed",
-    priority: get(row, priorityIdx) || "normal",
-    channel: get(row, channelIdx) || "email",
-    createdAt: get(row, createdIdx) || new Date().toISOString(),
-    closedAt: get(row, closedIdx) || null,
-    assigneeName: get(row, assigneeIdx) || null,
-    customerEmail: get(row, emailIdx) || "",
-    responseTimeMinutes: parseFloat(get(row, responseIdx)) || null,
-    resolutionTimeMinutes: parseFloat(get(row, resTimeIdx)) || null,
-    satisfactionScore: parseFloat(get(row, csatIdx)) || null,
-    tags,
-    messagesCount: parseInt(get(row, msgCountIdx)) || 1,
-    intentCategory: ic,
-    intentSubCategory: is,
-    intentDetail: id,
-    contactCategory: cc,
-    contactDetail: cd,
-  };
+  const headers = rows[0];
+  const columnMap = buildColumnMap(headers);
+  const tickets: GorgiasTicket[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+
+    // Skip empty rows
+    if (row.length === 0 || (row.length === 1 && !row[0].trim())) {
+      continue;
+    }
+
+    const aiIntent = getString(row, columnMap, "aiIntent");
+    const { intentCategory, intentSubCategory, intentDetail } = parseIntentParts(aiIntent);
+
+    const contactReason = getString(row, columnMap, "contactReason");
+    const { contactCategory, contactDetail } = parseContactReasonParts(contactReason);
+
+    const ticket: GorgiasTicket = {
+      id: getNumber(row, columnMap, "id"),
+      ticketUrl: getString(row, columnMap, "ticketUrl"),
+      subject: getString(row, columnMap, "subject"),
+      status: getString(row, columnMap, "status"),
+      channel: getString(row, columnMap, "channel"),
+      createdAt: getString(row, columnMap, "createdAt"),
+      closedAt: getString(row, columnMap, "closedAt"),
+      assigneeName: getString(row, columnMap, "assigneeName"),
+      customerEmail: getString(row, columnMap, "customerEmail"),
+      responseTimeMinutes: getNumber(row, columnMap, "responseTimeMinutes"),
+      resolutionTimeMinutes: getNumber(row, columnMap, "resolutionTimeMinutes"),
+      satisfactionScore: getNumber(row, columnMap, "satisfactionScore"),
+      tags: parseTags(getString(row, columnMap, "tags")),
+      messagesCount: getNumber(row, columnMap, "messagesCount"),
+      aiIntent,
+      intentCategory,
+      intentSubCategory,
+      intentDetail,
+      contactReason,
+      contactCategory,
+      contactDetail,
+      product: getString(row, columnMap, "product"),
+      resolution: getString(row, columnMap, "resolution"),
+      managedSentiment: getString(row, columnMap, "managedSentiment"),
+      emailBody: getString(row, columnMap, "emailBody"),
+    };
+
+    tickets.push(ticket);
+  }
+
+  return { tickets };
 }

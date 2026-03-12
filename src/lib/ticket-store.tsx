@@ -1,48 +1,41 @@
 "use client";
-
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from "react";
 import type { GorgiasTicket, EnhancedAnalytics } from "@/types/gorgias";
 import { parseGorgiasCsv } from "@/lib/csv-parser";
 import { computeAnalytics } from "@/lib/analytics";
 
-interface TicketStore {
+interface TicketContextValue {
   tickets: GorgiasTicket[];
   analytics: EnhancedAnalytics | null;
-  loading: boolean;
   fileName: string;
-  uploadCsv: (text: string, name: string) => void;
+  uploadCsv: (text: string, name?: string) => void;
   clear: () => void;
 }
 
-const TicketContext = createContext<TicketStore | null>(null);
+const TicketContext = createContext<TicketContextValue | null>(null);
 
 export function TicketProvider({ children }: { children: ReactNode }) {
   const [tickets, setTickets] = useState<GorgiasTicket[]>([]);
-  const [analytics, setAnalytics] = useState<EnhancedAnalytics | null>(null);
-  const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState("");
 
-  const uploadCsv = useCallback((text: string, name: string) => {
-    setLoading(true);
-    try {
-      const parsed = parseGorgiasCsv(text);
-      setTickets(parsed);
-      setFileName(name);
-      const stats = computeAnalytics(parsed);
-      setAnalytics(stats);
-    } finally {
-      setLoading(false);
-    }
+  const analytics = useMemo(
+    () => (tickets.length > 0 ? computeAnalytics(tickets) : null),
+    [tickets]
+  );
+
+  const uploadCsv = useCallback((text: string, name?: string) => {
+    const result = parseGorgiasCsv(text);
+    setTickets(result.tickets);
+    setFileName(name || "uploaded.csv");
   }, []);
 
   const clear = useCallback(() => {
     setTickets([]);
-    setAnalytics(null);
     setFileName("");
   }, []);
 
   return (
-    <TicketContext.Provider value={{ tickets, analytics, loading, fileName, uploadCsv, clear }}>
+    <TicketContext.Provider value={{ tickets, analytics, fileName, uploadCsv, clear }}>
       {children}
     </TicketContext.Provider>
   );
@@ -50,6 +43,6 @@ export function TicketProvider({ children }: { children: ReactNode }) {
 
 export function useTickets() {
   const ctx = useContext(TicketContext);
-  if (!ctx) throw new Error("useTickets must be used within TicketProvider");
+  if (!ctx) throw new Error("useTickets must be used within a TicketProvider");
   return ctx;
 }
