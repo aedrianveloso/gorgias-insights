@@ -84,7 +84,7 @@ export default function EmailAnalysisPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Product Mentions in Emails</h3>
           <p className="text-sm text-gray-400 mb-4">Products customers mention most in their messages</p>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {ei.productMentions.map((pm) => (
               <div key={pm.product} className="border rounded-lg p-3 text-center">
                 <p className="text-xl font-bold text-gray-900">{pm.count}</p>
@@ -92,6 +92,7 @@ export default function EmailAnalysisPage() {
                 <TicketDrillDown
                   tickets={tickets.filter(t => pm.ticketIds.includes(t.id))}
                   label="tickets"
+                  compact
                 />
               </div>
             ))}
