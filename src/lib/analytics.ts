@@ -422,7 +422,7 @@ function computeEmailInsights(tickets: GorgiasTicket[]): EmailInsight {
     { label: "Bath Mats & Tubmats", keywords: ["bath mat", "bath rug", "bath mats", "tubmat", "tub mat"] },
     { label: "Mattress Protectors & Pads", keywords: ["mattress protector", "mattress pad", "mattress topper", "mattress", "pillowtop topper"] },
     { label: "Supreme Egyptian Cotton", keywords: ["egyptian cotton", "supreme", "800 thread", "800tc"] },
-    { label: "Essentials Percale", keywords: ["percale", "essentials percale", "400tc percale"] },
+    { label: "Essentials Percale", keywords: ["percale", "essentials percale", "400tc percale", "400 thread count percale"] },
     { label: "Essentials Cotton Sateen", keywords: ["essentials cotton", "essentials sateen", "400tc sateen", "sateen solid"] },
     { label: "Comforters (DA)", keywords: ["down alternative comforter", "all season comforter", "extra warmth", "light warmth"] },
     { label: "Gramercy Collection", keywords: ["gramercy"] },
@@ -431,21 +431,20 @@ function computeEmailInsights(tickets: GorgiasTicket[]): EmailInsight {
     { label: "Garden Toile", keywords: ["garden toile"] },
     { label: "Herringbone Stitch", keywords: ["herringbone"] },
   ];
-  const productMentionMap = new Map<string, { count: number; ticketIds: number[] }>();
+  const productMentionMap = new Map<string, Set<number>>();
   withBody.forEach((t) => {
     const lower = t.emailBody.toLowerCase();
     productCategories.forEach(({ label, keywords }) => {
       if (keywords.some((kw) => lower.includes(kw))) {
-        const entry = productMentionMap.get(label) || { count: 0, ticketIds: [] };
-        entry.count++;
-        entry.ticketIds.push(t.id);
-        productMentionMap.set(label, entry);
+        const ids = productMentionMap.get(label) ?? new Set<number>();
+        ids.add(t.id);
+        productMentionMap.set(label, ids);
       }
     });
   });
 
   const productMentions = Array.from(productMentionMap.entries())
-    .map(([product, data]) => ({ product, count: data.count, ticketIds: data.ticketIds }))
+    .map(([product, ids]) => ({ product, count: ids.size, ticketIds: Array.from(ids) }))
     .sort((a, b) => b.count - a.count);
 
   // Sentiment distribution
@@ -572,11 +571,10 @@ function computeRecommendations(tickets: GorgiasTicket[]): ActionableRecommendat
     });
   }
 
-  // Return/exchange rate
-  const returnExchange = contacts.filter((c) =>
-    c.reason === "Return" || c.reason === "Exchange"
-  );
-  const reTotal = returnExchange.reduce((s, c) => s + c.count, 0);
+  // Return + exchange > 10%
+  const returnReq = emailInsightsForRecs.topCustomerRequests.find((r) => r.request === "Return request");
+  const exchangeReq = emailInsightsForRecs.topCustomerRequests.find((r) => r.request === "Exchange request");
+  const reTotal = (returnReq?.count ?? 0) + (exchangeReq?.count ?? 0);
   const rePercent = parseFloat(((reTotal / total) * 100).toFixed(1));
   if (rePercent > 10) {
     recs.push({
@@ -619,51 +617,47 @@ function computeRecommendations(tickets: GorgiasTicket[]): ActionableRecommendat
     }
   }
 
-  // Email body insights
-  const withBody = tickets.filter((t) => t.emailBody && t.emailBody.trim().length > 10);
-  if (withBody.length > 0) {
-    const stockMentions = withBody.filter((t) =>
-      /out of stock|not available|back in stock|restock|sold out/i.test(t.emailBody)
-    );
-    if (stockMentions.length > 3) {
-      recs.push({
-        priority: "high",
-        category: "Inventory",
-        title: `${stockMentions.length} tickets mention stock availability issues`,
-        description: "Customers are frequently asking about out-of-stock items. Consider implementing back-in-stock notifications and improving inventory visibility on product pages.",
-        impact: "Could convert waiting customers into immediate sales",
-      });
-    }
-
-    const qualityMentions = withBody.filter((t) =>
-      /defect|damaged|broken|torn|quality|fell apart|pilling/i.test(t.emailBody)
-    );
-    if (qualityMentions.length > 2) {
-      recs.push({
-        priority: "high",
-        category: "Product Quality",
-        title: `${qualityMentions.length} tickets mention product quality issues`,
-        description: "Multiple customers report quality problems. This warrants a QA review of affected products and potentially updating supplier standards.",
-        impact: "Addressing quality issues reduces returns and protects brand reputation",
-      });
-    }
+  // Stock-related email mentions > 3
+  const emailInsights = computeEmailInsights(tickets);
+  const stockMentions = emailInsights.topCustomerRequests.find(
+    (r) => r.request === "Stock availability"
+  );
+  if (stockMentions && stockMentions.count > 3) {
+    recs.push({
+      priority: "medium",
+      category: "Inventory",
+      title: `${stockMentions.count} tickets mention stock availability issues`,
+      description: "Customers are frequently asking about out-of-stock items. Consider implementing back-in-stock notifications and improving inventory visibility on product pages.",
+      impact: "Could convert waiting customers into immediate sales",
+    });
   }
 
-  // Macro usage (if we can detect it from email bodies)
-  const feedbackTickets = tickets.filter((t) => t.intentCategory === "Feedback");
-  if (feedbackTickets.length > 0) {
-    const positiveFeedback = feedbackTickets.filter((t) =>
-      t.intentSubCategory === "Positive" || (t.managedSentiment || "").toLowerCase().includes("positive")
-    );
-    if (positiveFeedback.length > 5) {
-      recs.push({
-        priority: "low",
-        category: "Marketing",
-        title: `${positiveFeedback.length} positive feedback tickets could be leveraged`,
-        description: "Collect and showcase positive customer feedback. Consider asking these satisfied customers for reviews on your product pages.",
-        impact: "Social proof can increase conversion rates by 10-15%",
-      });
-    }
+  // Quality-related email mentions > 2
+  const qualityMentions = emailInsights.topCustomerRequests.find(
+    (r) => r.request === "Quality / defect issue"
+  );
+  if (qualityMentions && qualityMentions.count > 2) {
+    recs.push({
+      priority: "high",
+      category: "Product Quality",
+      title: `${qualityMentions.count} tickets mention product quality issues`,
+      description: "Multiple customers report quality problems. This warrants a QA review of affected products and potentially updating supplier standards.",
+      impact: "Addressing quality issues reduces returns and protects brand reputation",
+    });
+  }
+
+  // Positive feedback > 5
+  const positiveSent = emailInsights.sentimentDistribution.find(
+    (s) => s.sentiment.toLowerCase() === "positive"
+  );
+  if (positiveSent && positiveSent.count > 5) {
+    recs.push({
+      priority: "low",
+      category: "Marketing",
+      title: `${positiveSent.count} positive feedback tickets could be leveraged`,
+      description: "Collect and showcase positive customer feedback. Consider asking these satisfied customers for reviews on your product pages.",
+      impact: "Social proof can increase conversion rates by 10-15%",
+    });
   }
 
   return recs.sort((a, b) => {
