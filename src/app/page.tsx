@@ -186,6 +186,7 @@ export default function Dashboard() {
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="pb-3 text-xs font-medium text-gray-500">Agent</th>
+                <th className="pb-3 text-xs font-medium text-gray-500">Tickets</th>
                 <th className="pb-3 text-xs font-medium text-gray-500">Closed</th>
                 <th className="pb-3 text-xs font-medium text-gray-500">Avg Response</th>
                 <th className="pb-3 text-xs font-medium text-gray-500">Avg Resolution</th>
@@ -197,6 +198,7 @@ export default function Dashboard() {
               {a.agentQuality.map((agent) => (
                 <tr key={agent.name} className="border-b border-gray-50">
                   <td className="py-2.5 font-medium text-gray-900">{agent.name}</td>
+                  <td className="py-2.5 text-gray-600">{agent.ticketsHandled}</td>
                   <td className="py-2.5 text-gray-600">{agent.ticketsClosed}</td>
                   <td className="py-2.5 text-gray-600">{formatMinutes(agent.avgResponseTime)}</td>
                   <td className="py-2.5 text-gray-600">{formatMinutes(agent.avgResolutionTime)}</td>

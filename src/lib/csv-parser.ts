@@ -162,6 +162,36 @@ function getNumber(row: string[], columnMap: Record<string, number>, field: stri
 }
 
 /**
+ * Parse a time value that could be minutes (number), HH:MM:SS, or MM:SS format.
+ * Always returns minutes.
+ */
+function parseTimeMinutes(row: string[], columnMap: Record<string, number>, field: string): number {
+  const raw = getString(row, columnMap, field);
+  if (!raw) return 0;
+
+  // Check for HH:MM:SS or MM:SS format
+  const timeParts = raw.match(/^(\d+):(\d+)(?::(\d+))?$/);
+  if (timeParts) {
+    if (timeParts[3] !== undefined) {
+      // HH:MM:SS
+      const hours = parseInt(timeParts[1]);
+      const minutes = parseInt(timeParts[2]);
+      const seconds = parseInt(timeParts[3]);
+      return hours * 60 + minutes + (seconds >= 30 ? 1 : 0);
+    } else {
+      // MM:SS
+      const minutes = parseInt(timeParts[1]);
+      const seconds = parseInt(timeParts[2]);
+      return minutes + (seconds >= 30 ? 1 : 0);
+    }
+  }
+
+  // Plain number (assumed minutes)
+  const num = parseFloat(raw);
+  return isNaN(num) ? 0 : Math.round(num);
+}
+
+/**
  * Parse AI Intent string like "Exchange::Request::Other" into category/subCategory/detail.
  */
 function parseIntentParts(intent: string): {
@@ -265,8 +295,8 @@ export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fi
       closedAt: getString(row, columnMap, "closedAt"),
       assigneeName: getString(row, columnMap, "assigneeName"),
       customerEmail: getString(row, columnMap, "customerEmail"),
-      responseTimeMinutes: getNumber(row, columnMap, "responseTimeMinutes"),
-      resolutionTimeMinutes: getNumber(row, columnMap, "resolutionTimeMinutes"),
+      responseTimeMinutes: parseTimeMinutes(row, columnMap, "responseTimeMinutes"),
+      resolutionTimeMinutes: parseTimeMinutes(row, columnMap, "resolutionTimeMinutes"),
       satisfactionScore: getNumber(row, columnMap, "satisfactionScore"),
       tags: parseTags(getString(row, columnMap, "tags")),
       messagesCount: getNumber(row, columnMap, "messagesCount"),
@@ -284,6 +314,19 @@ export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fi
     };
 
     tickets.push(ticket);
+  }
+
+  // Debug: log first ticket to verify parsing
+  if (tickets.length > 0) {
+    const t = tickets[0];
+    console.log("[CSV Parser] First ticket sample:", {
+      id: t.id, status: t.status, channel: t.channel,
+      assigneeName: t.assigneeName, aiIntent: t.aiIntent,
+      contactReason: t.contactReason, managedSentiment: t.managedSentiment,
+      responseTimeMinutes: t.responseTimeMinutes, resolutionTimeMinutes: t.resolutionTimeMinutes,
+      messagesCount: t.messagesCount, satisfactionScore: t.satisfactionScore,
+      closedAt: t.closedAt, hasEmailBody: (t.emailBody?.length || 0) > 10,
+    });
   }
 
   return { tickets };

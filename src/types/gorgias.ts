@@ -78,6 +78,7 @@ export interface ProductInsight {
 
 export interface AgentQuality {
   name: string;
+  ticketsHandled: number;
   ticketsClosed: number;
   avgResponseTime: number;
   avgResolutionTime: number;

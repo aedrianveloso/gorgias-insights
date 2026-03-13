@@ -9,14 +9,25 @@ import type {
   ActionableRecommendation,
 } from "@/types/gorgias";
 
+// ─── Helpers for status checks ──────────────────────────
+
+const CLOSED_STATUSES = new Set(["closed", "solved", "resolved", "done", "completed"]);
+
+function isClosed(t: GorgiasTicket): boolean {
+  if (CLOSED_STATUSES.has(t.status.toLowerCase())) return true;
+  // If closedAt is populated, treat as closed regardless of status value
+  if (t.closedAt && t.closedAt.trim().length > 0) return true;
+  return false;
+}
+
 // ─── Main analytics computation ─────────────────────────
 
 export function computeAnalytics(tickets: GorgiasTicket[]): EnhancedAnalytics {
   const total = tickets.length;
   if (total === 0) return emptyAnalytics();
 
-  const closed = tickets.filter((t) => t.status.toLowerCase() === "closed");
-  const open = tickets.filter((t) => t.status.toLowerCase() !== "closed");
+  const closed = tickets.filter(isClosed);
+  const open = tickets.filter((t) => !isClosed(t));
 
   // Response/resolution times
   const withResponse = tickets.filter((t) => t.responseTimeMinutes != null && t.responseTimeMinutes > 0);
@@ -247,7 +258,7 @@ function computeAgentQuality(tickets: GorgiasTicket[]): AgentQuality[] {
   return Array.from(map.entries())
     .filter(([name]) => name !== "Unassigned")
     .map(([name, agentTickets]) => {
-      const closed = agentTickets.filter((t) => t.status.toLowerCase() === "closed");
+      const closed = agentTickets.filter(isClosed);
       const withResponse = agentTickets.filter((t) => t.responseTimeMinutes != null && t.responseTimeMinutes > 0);
       const withResolution = agentTickets.filter((t) => t.resolutionTimeMinutes != null && t.resolutionTimeMinutes > 0);
       const withCsat = agentTickets.filter((t) => t.satisfactionScore != null && t.satisfactionScore > 0);
@@ -276,6 +287,7 @@ function computeAgentQuality(tickets: GorgiasTicket[]): AgentQuality[] {
 
       return {
         name,
+        ticketsHandled: agentTickets.length,
         ticketsClosed: closed.length,
         avgResponseTime: withResponse.length > 0
           ? Math.round(withResponse.reduce((s, t) => s + t.responseTimeMinutes!, 0) / withResponse.length)
@@ -301,7 +313,7 @@ function computeAgentQuality(tickets: GorgiasTicket[]): AgentQuality[] {
           .slice(0, 5),
       };
     })
-    .sort((a, b) => b.ticketsClosed - a.ticketsClosed);
+    .sort((a, b) => b.ticketsHandled - a.ticketsHandled);
 }
 
 // ─── Email body insights ────────────────────────────────

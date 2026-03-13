@@ -52,7 +52,8 @@ export default function AgentsPage() {
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="pb-3 text-xs font-medium text-gray-500">Agent</th>
-                <th className="pb-3 text-xs font-medium text-gray-500">Tickets Closed</th>
+                <th className="pb-3 text-xs font-medium text-gray-500">Tickets</th>
+                <th className="pb-3 text-xs font-medium text-gray-500">Closed</th>
                 <th className="pb-3 text-xs font-medium text-gray-500">Avg Response</th>
                 <th className="pb-3 text-xs font-medium text-gray-500">Avg Resolution</th>
                 <th className="pb-3 text-xs font-medium text-gray-500">CSAT</th>
@@ -70,6 +71,7 @@ export default function AgentsPage() {
                   onClick={() => setSelectedAgent(selectedAgent === agent.name ? null : agent.name)}
                 >
                   <td className="py-3 font-medium text-gray-900">{agent.name}</td>
+                  <td className="py-3 text-gray-600">{agent.ticketsHandled}</td>
                   <td className="py-3 text-gray-600">{agent.ticketsClosed}</td>
                   <td className="py-3 text-gray-600">{formatMinutes(agent.avgResponseTime)}</td>
                   <td className="py-3 text-gray-600">{formatMinutes(agent.avgResolutionTime)}</td>
@@ -98,12 +100,13 @@ export default function AgentsPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Workload Distribution</h3>
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={agents.map(a => ({ name: a.name, closed: a.ticketsClosed }))}>
+          <BarChart data={agents.map(a => ({ name: a.name, handled: a.ticketsHandled, closed: a.ticketsClosed }))}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="name" tick={{ fontSize: 11 }} stroke="#9ca3af" />
             <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
             <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
-            <Bar dataKey="closed" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Tickets Closed" />
+            <Bar dataKey="handled" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Tickets Handled" />
+            <Bar dataKey="closed" fill="#10b981" radius={[4, 4, 0, 0]} name="Tickets Closed" />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -182,7 +185,7 @@ export default function AgentsPage() {
 
 function computeRadar(agent: AgentQuality, allAgents: AgentQuality[]) {
   // Normalize each metric to 0-100 scale relative to team
-  const maxClosed = Math.max(...allAgents.map((a) => a.ticketsClosed)) || 1;
+  const maxHandled = Math.max(...allAgents.map((a) => a.ticketsHandled)) || 1;
   const maxCsat = 5;
   const maxOneTouch = 100;
   // For response/resolution, lower is better so we invert
@@ -190,7 +193,7 @@ function computeRadar(agent: AgentQuality, allAgents: AgentQuality[]) {
   const maxResolution = Math.max(...allAgents.map((a) => a.avgResolutionTime)) || 1;
 
   return [
-    { metric: "Volume", value: Math.round((agent.ticketsClosed / maxClosed) * 100) },
+    { metric: "Volume", value: Math.round((agent.ticketsHandled / maxHandled) * 100) },
     { metric: "CSAT", value: Math.round((agent.satisfactionScore / maxCsat) * 100) },
     { metric: "Response Speed", value: agent.avgResponseTime > 0 ? Math.round((1 - agent.avgResponseTime / maxResponse) * 100) : 50 },
     { metric: "Resolution Speed", value: agent.avgResolutionTime > 0 ? Math.round((1 - agent.avgResolutionTime / maxResolution) * 100) : 50 },
