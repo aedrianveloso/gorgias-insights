@@ -571,9 +571,12 @@ function computeRecommendations(tickets: GorgiasTicket[]): ActionableRecommendat
     });
   }
 
+  // Compute email insights once for use in recommendations
+  const emailInsights = computeEmailInsights(tickets);
+
   // Return + exchange > 10%
-  const returnReq = emailInsightsForRecs.topCustomerRequests.find((r) => r.request === "Return request");
-  const exchangeReq = emailInsightsForRecs.topCustomerRequests.find((r) => r.request === "Exchange request");
+  const returnReq = emailInsights.topCustomerRequests.find((r) => r.request === "Return request");
+  const exchangeReq = emailInsights.topCustomerRequests.find((r) => r.request === "Exchange request");
   const reTotal = (returnReq?.count ?? 0) + (exchangeReq?.count ?? 0);
   const rePercent = parseFloat(((reTotal / total) * 100).toFixed(1));
   if (rePercent > 10) {
@@ -618,7 +621,6 @@ function computeRecommendations(tickets: GorgiasTicket[]): ActionableRecommendat
   }
 
   // Stock-related email mentions > 3
-  const emailInsights = computeEmailInsights(tickets);
   const stockMentions = emailInsights.topCustomerRequests.find(
     (r) => r.request === "Stock availability"
   );
