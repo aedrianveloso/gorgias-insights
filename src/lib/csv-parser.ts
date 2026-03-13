@@ -2,36 +2,42 @@ import { GorgiasTicket } from "../types/gorgias";
 
 // Column name variations for flexible matching
 const COLUMN_MAPPINGS: Record<string, string[]> = {
-  id: ["id", "ticket_id"],
-  ticketUrl: ["ticket_url", "url", "link"],
+  id: ["id", "ticket_id", "ticket id"],
+  ticketUrl: ["ticket_url", "ticket url", "url", "link"],
   subject: ["subject", "title"],
   status: ["status"],
   channel: ["channel", "via"],
-  createdAt: ["created_at", "created", "date_created", "created_datetime"],
-  closedAt: ["closed_at", "closed", "closed_datetime"],
-  assigneeName: ["assignee_name", "assignee", "agent", "assigned_to"],
-  customerEmail: ["customer_email", "customer", "email", "requester_email"],
+  createdAt: ["created_at", "created", "date_created", "created_datetime", "created datetime"],
+  closedAt: ["closed_at", "closed", "closed_datetime", "closed datetime"],
+  assigneeName: ["assignee_name", "assignee name", "assignee", "agent", "assigned_to"],
+  customerEmail: ["customer_email", "customer email", "customer", "email", "requester_email"],
   responseTimeMinutes: [
+    "first_response_time_(minutes)",
     "first_response_time_minutes",
+    "first response time (minutes)",
+    "first response time minutes",
     "response_time",
     "response_time_minutes",
     "first_response_time",
   ],
   resolutionTimeMinutes: [
+    "full_resolution_time_(minutes)",
     "full_resolution_time_minutes",
+    "full resolution time (minutes)",
+    "full resolution time minutes",
     "resolution_time",
     "resolution_time_minutes",
     "full_resolution_time",
   ],
-  satisfactionScore: ["satisfaction_score", "csat", "satisfaction_rating", "csat_score"],
+  satisfactionScore: ["satisfaction_score", "satisfaction score", "csat", "satisfaction_rating", "csat_score"],
   tags: ["tags", "labels"],
-  messagesCount: ["messages_count", "messages", "message_count"],
-  aiIntent: ["ticket_field:_ai_intent", "ai_intent", "intent"],
-  contactReason: ["ticket_field:_contact_reason", "contact_reason"],
-  product: ["ticket_field:_product", "product"],
-  resolution: ["ticket_field:_resolution", "resolution"],
-  managedSentiment: ["managed_sentiment", "sentiment", "ticket_field:_managed_sentiment"],
-  emailBody: ["email_body", "body", "message_body", "email_content"],
+  messagesCount: ["messages_count", "messages count", "messages", "message_count"],
+  aiIntent: ["ticket_field:_ai_intent", "ticket field: ai intent", "ai_intent", "ai intent", "intent"],
+  contactReason: ["ticket_field:_contact_reason", "ticket field: contact reason", "contact_reason", "contact reason"],
+  product: ["ticket_field:_product", "ticket field: product", "product"],
+  resolution: ["ticket_field:_resolution", "ticket field: resolution", "resolution"],
+  managedSentiment: ["managed_sentiment", "managed sentiment", "sentiment", "ticket_field:_managed_sentiment", "ticket field: managed sentiment"],
+  emailBody: ["email_body", "email body", "body", "message_body", "email_content"],
 };
 
 /**
@@ -116,12 +122,16 @@ function parseCsvRows(csvText: string): string[][] {
  * Case-insensitive, trims whitespace.
  */
 function buildColumnMap(headers: string[]): Record<string, number> {
-  const normalizedHeaders = headers.map((h) => h.trim().toLowerCase());
+  // Normalize: lowercase, trim, replace spaces with underscores, strip parentheses
+  const normalizedHeaders = headers.map((h) =>
+    h.trim().toLowerCase().replace(/\s+/g, "_").replace(/[()]/g, "")
+  );
   const columnMap: Record<string, number> = {};
 
   for (const [fieldName, variations] of Object.entries(COLUMN_MAPPINGS)) {
     for (const variation of variations) {
-      const idx = normalizedHeaders.indexOf(variation.toLowerCase());
+      const normalizedVariation = variation.toLowerCase().replace(/\s+/g, "_").replace(/[()]/g, "");
+      const idx = normalizedHeaders.indexOf(normalizedVariation);
       if (idx !== -1) {
         columnMap[fieldName] = idx;
         break;
@@ -223,6 +233,12 @@ export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fi
 
   const headers = rows[0];
   const columnMap = buildColumnMap(headers);
+
+  // Debug: log column mapping so we can verify it's working
+  console.log("[CSV Parser] Headers found:", headers);
+  console.log("[CSV Parser] Column mapping:", columnMap);
+  console.log("[CSV Parser] Unmapped fields:", Object.keys(COLUMN_MAPPINGS).filter(f => !(f in columnMap)));
+
   const tickets: GorgiasTicket[] = [];
 
   for (let i = 1; i < rows.length; i++) {
