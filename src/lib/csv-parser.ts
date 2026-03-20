@@ -340,6 +340,35 @@ export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fi
 
   const tickets: GorgiasTicket[] = [];
 
+  // Detect if time values are actually in seconds (Gorgias often exports seconds
+  // despite the column header saying "minutes"). Sample first 50 rows to check.
+  let timeUnitDivisor = 1;
+  const sampleSize = Math.min(50, rows.length - 1);
+  if (sampleSize > 0) {
+    const sampleResponseTimes: number[] = [];
+    const sampleResolutionTimes: number[] = [];
+    for (let s = 1; s <= sampleSize; s++) {
+      const row = rows[s];
+      const rt = parseTimeMinutes(row, columnMap, "responseTimeMinutes");
+      const res = parseTimeMinutes(row, columnMap, "resolutionTimeMinutes");
+      if (rt > 0) sampleResponseTimes.push(rt);
+      if (res > 0) sampleResolutionTimes.push(res);
+    }
+    // If median response or resolution time > 600 (10 hours in minutes),
+    // the values are almost certainly in seconds, not minutes
+    const median = (arr: number[]) => {
+      if (arr.length === 0) return 0;
+      const sorted = [...arr].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)];
+    };
+    const medianResponse = median(sampleResponseTimes);
+    const medianResolution = median(sampleResolutionTimes);
+    if (medianResponse > 600 || medianResolution > 600) {
+      timeUnitDivisor = 60;
+      console.log("[CSV Parser] Detected time values are in seconds, converting to minutes (median response:", medianResponse, "median resolution:", medianResolution, ")");
+    }
+  }
+
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
 
@@ -364,8 +393,8 @@ export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fi
       closedAt: getString(row, columnMap, "closedAt"),
       assigneeName: getString(row, columnMap, "assigneeName"),
       customerEmail: getString(row, columnMap, "customerEmail"),
-      responseTimeMinutes: parseTimeMinutes(row, columnMap, "responseTimeMinutes"),
-      resolutionTimeMinutes: parseTimeMinutes(row, columnMap, "resolutionTimeMinutes"),
+      responseTimeMinutes: Math.round(parseTimeMinutes(row, columnMap, "responseTimeMinutes") / timeUnitDivisor),
+      resolutionTimeMinutes: Math.round(parseTimeMinutes(row, columnMap, "resolutionTimeMinutes") / timeUnitDivisor),
       satisfactionScore: getNumber(row, columnMap, "satisfactionScore"),
       tags: parseTags(getString(row, columnMap, "tags")),
       messagesCount: getNumber(row, columnMap, "messagesCount"),
