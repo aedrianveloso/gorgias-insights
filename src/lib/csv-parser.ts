@@ -41,6 +41,18 @@ const COLUMN_MAPPINGS: Record<string, string[]> = {
 };
 
 /**
+ * Strip BOM (Byte Order Mark) from the beginning of text.
+ * Common in CSV files exported from Excel and Gorgias.
+ */
+function stripBom(text: string): string {
+  // UTF-8 BOM: \uFEFF, also handle other variants
+  if (text.charCodeAt(0) === 0xFEFF) return text.slice(1);
+  // Sometimes BOM appears as these bytes in decoded text
+  if (text.startsWith('\xEF\xBB\xBF')) return text.slice(3);
+  return text;
+}
+
+/**
  * Parse CSV text that may contain quoted fields with commas, escaped quotes (""),
  * and newlines inside quoted fields.
  * Returns an array of string arrays (rows of fields).
@@ -118,23 +130,74 @@ function parseCsvRows(csvText: string): string[][] {
 }
 
 /**
+ * Normalize a header string: lowercase, trim, replace spaces/special chars with underscores,
+ * strip parentheses, collapse multiple underscores.
+ */
+function normalizeHeader(h: string): string {
+  return h.trim().toLowerCase()
+    .replace(/[()]/g, "")      // strip parens
+    .replace(/\s+/g, "_")      // spaces → underscores
+    .replace(/[^\w:]/g, "_")   // non-word chars (except :) → underscores
+    .replace(/_+/g, "_")       // collapse multiple underscores
+    .replace(/^_|_$/g, "");    // trim leading/trailing underscores
+}
+
+/**
  * Build a mapping from our field names to CSV column indices.
- * Case-insensitive, trims whitespace.
+ * Uses exact match first, then fuzzy/contains matching as fallback.
  */
 function buildColumnMap(headers: string[]): Record<string, number> {
-  // Normalize: lowercase, trim, replace spaces with underscores, strip parentheses
-  const normalizedHeaders = headers.map((h) =>
-    h.trim().toLowerCase().replace(/\s+/g, "_").replace(/[()]/g, "")
-  );
+  const normalizedHeaders = headers.map(normalizeHeader);
   const columnMap: Record<string, number> = {};
 
   for (const [fieldName, variations] of Object.entries(COLUMN_MAPPINGS)) {
+    // Pass 1: exact match after normalization
+    let found = false;
     for (const variation of variations) {
-      const normalizedVariation = variation.toLowerCase().replace(/\s+/g, "_").replace(/[()]/g, "");
+      const normalizedVariation = normalizeHeader(variation);
       const idx = normalizedHeaders.indexOf(normalizedVariation);
       if (idx !== -1) {
         columnMap[fieldName] = idx;
+        found = true;
         break;
+      }
+    }
+    if (found) continue;
+
+    // Pass 2: contains-based fuzzy match (for headers with extra text)
+    for (const variation of variations) {
+      const normalizedVariation = normalizeHeader(variation);
+      if (normalizedVariation.length < 3) continue; // skip very short patterns
+      const idx = normalizedHeaders.findIndex(
+        (h) => h.includes(normalizedVariation) || normalizedVariation.includes(h)
+      );
+      if (idx !== -1 && !(Object.values(columnMap).includes(idx))) {
+        columnMap[fieldName] = idx;
+        found = true;
+        break;
+      }
+    }
+    if (found) continue;
+
+    // Pass 3: keyword match for common fields (last resort)
+    const keywordMap: Record<string, string[]> = {
+      status: ["status"],
+      channel: ["channel", "via"],
+      closedAt: ["closed_d", "closed_at"],
+      assigneeName: ["assignee", "agent_name"],
+      satisfactionScore: ["satisfaction", "csat"],
+      messagesCount: ["messages_count", "message_count", "messages"],
+      responseTimeMinutes: ["response_time", "first_response"],
+      resolutionTimeMinutes: ["resolution_time", "full_resolution"],
+    };
+    const keywords = keywordMap[fieldName];
+    if (keywords) {
+      for (const kw of keywords) {
+        const idx = normalizedHeaders.findIndex((h) => h.includes(kw));
+        if (idx !== -1 && !(Object.values(columnMap).includes(idx))) {
+          columnMap[fieldName] = idx;
+          break;
+        }
       }
     }
   }
@@ -256,7 +319,10 @@ export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fi
     return { tickets: [] };
   }
 
-  const rows = parseCsvRows(csvText);
+  // Strip BOM character that Excel/Gorgias may add
+  const cleanText = stripBom(csvText);
+
+  const rows = parseCsvRows(cleanText);
   if (rows.length < 2) {
     return { tickets: [] };
   }
@@ -264,10 +330,13 @@ export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fi
   const headers = rows[0];
   const columnMap = buildColumnMap(headers);
 
-  // Debug: log column mapping so we can verify it's working
-  console.log("[CSV Parser] Headers found:", headers);
+  // Debug: log raw headers, normalized headers, column mapping, and unmapped fields
+  const normalizedHeaders = headers.map(normalizeHeader);
+  console.log("[CSV Parser] Raw headers:", headers);
+  console.log("[CSV Parser] Normalized headers:", normalizedHeaders);
   console.log("[CSV Parser] Column mapping:", columnMap);
   console.log("[CSV Parser] Unmapped fields:", Object.keys(COLUMN_MAPPINGS).filter(f => !(f in columnMap)));
+  console.log("[CSV Parser] Header char codes (first 3):", headers.slice(0, 3).map(h => Array.from(h).map(c => c.charCodeAt(0))));
 
   const tickets: GorgiasTicket[] = [];
 
@@ -316,17 +385,31 @@ export function parseGorgiasCsv(csvText: string): { tickets: GorgiasTicket[]; fi
     tickets.push(ticket);
   }
 
-  // Debug: log first ticket to verify parsing
+  // Debug: log first ticket with ALL fields + raw row data
   if (tickets.length > 0) {
     const t = tickets[0];
-    console.log("[CSV Parser] First ticket sample:", {
-      id: t.id, status: t.status, channel: t.channel,
-      assigneeName: t.assigneeName, aiIntent: t.aiIntent,
-      contactReason: t.contactReason, managedSentiment: t.managedSentiment,
+    console.log("[CSV Parser] First ticket (all fields):", {
+      id: t.id, ticketUrl: t.ticketUrl, subject: t.subject,
+      status: t.status, channel: t.channel,
+      createdAt: t.createdAt, closedAt: t.closedAt,
+      assigneeName: t.assigneeName, customerEmail: t.customerEmail,
       responseTimeMinutes: t.responseTimeMinutes, resolutionTimeMinutes: t.resolutionTimeMinutes,
-      messagesCount: t.messagesCount, satisfactionScore: t.satisfactionScore,
-      closedAt: t.closedAt, hasEmailBody: (t.emailBody?.length || 0) > 10,
+      satisfactionScore: t.satisfactionScore, messagesCount: t.messagesCount,
+      tags: t.tags, aiIntent: t.aiIntent, contactReason: t.contactReason,
+      product: t.product, resolution: t.resolution,
+      managedSentiment: t.managedSentiment,
+      hasEmailBody: (t.emailBody?.length || 0) > 10,
     });
+    console.log("[CSV Parser] First raw row:", rows[1]);
+    // Log status distribution for quick debugging
+    const statusCounts: Record<string, number> = {};
+    const channelCounts: Record<string, number> = {};
+    tickets.forEach(tk => {
+      statusCounts[tk.status || "(empty)"] = (statusCounts[tk.status || "(empty)"] || 0) + 1;
+      channelCounts[tk.channel || "(empty)"] = (channelCounts[tk.channel || "(empty)"] || 0) + 1;
+    });
+    console.log("[CSV Parser] Status distribution:", statusCounts);
+    console.log("[CSV Parser] Channel distribution:", channelCounts);
   }
 
   return { tickets };
