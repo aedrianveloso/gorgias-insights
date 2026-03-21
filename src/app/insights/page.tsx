@@ -5,10 +5,20 @@ import Link from "next/link";
 import TicketDrillDown from "@/components/tickets/TicketDrillDown";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
 } from "recharts";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
+const SEVERITY_COLORS = { high: "border-red-200 bg-red-50", medium: "border-yellow-200 bg-yellow-50", low: "border-green-200 bg-green-50" };
+const SEVERITY_BADGE = { high: "bg-red-200 text-red-800", medium: "bg-yellow-200 text-yellow-800", low: "bg-green-200 text-green-800" };
+
+function formatMinutes(min: number): string {
+  if (min <= 0) return "N/A";
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
 
 export default function InsightsPage() {
   const { analytics, tickets } = useTickets();
@@ -17,7 +27,7 @@ export default function InsightsPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">No data yet</h2>
-        <p className="text-gray-500 mb-6">Upload your Gorgias CSV to see insights.</p>
+        <p className="text-gray-500 mb-6">Upload your Gorgias CSV to see customer voice insights.</p>
         <Link href="/upload" className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700">
           Upload CSV Data
         </Link>
@@ -26,21 +36,22 @@ export default function InsightsPage() {
   }
 
   const a = analytics;
+  const cv = a.customerVoice;
+  const ex = a.exchangeAnalysis;
+  const monthly = a.monthlyBreakdown;
 
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">Insights</h2>
-        <p className="text-gray-500 mt-1">Deep analysis Gorgias cannot provide</p>
+        <h2 className="text-2xl font-bold text-gray-900">Customer Voice</h2>
+        <p className="text-gray-500 mt-1">What your customers are really saying — insights Gorgias cannot provide</p>
       </div>
 
-      {/* Recommendations */}
+      {/* ─── Recommendations ──────────────────────────────── */}
       {a.recommendations.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Actionable Recommendations</h3>
-          <p className="text-sm text-gray-400 mb-4">
-            Auto-generated insights based on your ticket data — Gorgias gives you none of this
-          </p>
+          <p className="text-sm text-gray-400 mb-4">Auto-generated from your ticket patterns</p>
           <div className="space-y-4">
             {a.recommendations.map((rec, i) => (
               <div key={i} className={`p-4 rounded-lg border ${
@@ -65,11 +76,400 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {/* Intent Drill-Down */}
+      {/* ─── First Contact Drivers + Customer Types ─────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {cv.firstContactDrivers.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Why Customers Reach Out</h3>
+            <p className="text-xs text-gray-400 mb-4">First contact drivers by volume</p>
+            <div className="space-y-2">
+              {cv.firstContactDrivers.filter(d => d.reason !== "Unknown").slice(0, 8).map((driver) => (
+                <div key={driver.reason}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="font-medium text-gray-900">{driver.reason}</span>
+                    <span className="text-gray-500">{driver.count} ({driver.percentage}%)</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
+                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${driver.percentage}%` }} />
+                  </div>
+                  <TicketDrillDown
+                    tickets={tickets.filter(t => driver.ticketIds.includes(t.id))}
+                    label="tickets"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {cv.customerTypeBreakdown.length > 0 && cv.customerTypeBreakdown.some(c => c.type !== "Unknown") && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Customer Types</h3>
+            <p className="text-xs text-gray-400 mb-4">Who is reaching out</p>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={cv.customerTypeBreakdown.filter(c => c.type !== "Unknown").map(c => ({ name: `${c.type} (${c.percentage}%)`, value: c.count }))}
+                  cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value"
+                >
+                  {cv.customerTypeBreakdown.filter(c => c.type !== "Unknown").map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="mt-3 space-y-1">
+              {cv.customerTypeBreakdown.filter(c => c.type !== "Unknown").map((ct) => (
+                <TicketDrillDown
+                  key={ct.type}
+                  tickets={tickets.filter(t => ct.ticketIds.includes(t.id))}
+                  label={`${ct.type} tickets`}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Common Themes ────────────────────────────────── */}
+      {cv.commonThemes.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Common Themes</h3>
+          <p className="text-sm text-gray-400 mb-4">Patterns detected from customer messages</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {cv.commonThemes.map((theme) => (
+              <div key={theme.theme} className="border rounded-lg p-4">
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="text-sm font-semibold text-gray-900">{theme.theme}</h4>
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded shrink-0 ml-2">{theme.count} tickets</span>
+                </div>
+                <p className="text-xs text-gray-500 mb-2">{theme.description}</p>
+                {theme.examples.length > 0 && (
+                  <p className="text-xs text-gray-400 italic line-clamp-2 mb-2">
+                    &quot;{theme.examples[0]}...&quot;
+                  </p>
+                )}
+                <TicketDrillDown
+                  tickets={tickets.filter(t => theme.ticketIds.includes(t.id))}
+                  label="tickets"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── What's Working + Improvement Opportunities ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {cv.whatWorksWell.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">What&apos;s Working Well</h3>
+            <p className="text-xs text-gray-400 mb-4">Positive patterns from satisfied customers</p>
+            <div className="space-y-3">
+              {cv.whatWorksWell.map((item) => (
+                <div key={item.pattern} className="border border-green-200 bg-green-50 rounded-lg p-3">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium text-green-900">{item.pattern}</span>
+                    <span className="text-xs bg-green-200 text-green-800 px-2 py-0.5 rounded">{item.count}</span>
+                  </div>
+                  {item.examples.length > 0 && (
+                    <p className="text-xs text-green-700 italic line-clamp-2">
+                      &quot;{item.examples[0]}...&quot;
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {cv.improvementOpportunities.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-1">Improvement Opportunities</h3>
+            <p className="text-xs text-gray-400 mb-4">Areas identified from negative feedback</p>
+            <div className="space-y-3">
+              {cv.improvementOpportunities.map((item) => (
+                <div key={item.area} className={`border rounded-lg p-3 ${SEVERITY_COLORS[item.severity]}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${SEVERITY_BADGE[item.severity]}`}>
+                      {item.severity}
+                    </span>
+                    <span className="text-sm font-medium text-gray-900">{item.area}</span>
+                    <span className="text-xs text-gray-500 ml-auto">{item.count} tickets</span>
+                  </div>
+                  <p className="text-xs text-gray-600">{item.description}</p>
+                  <TicketDrillDown
+                    tickets={tickets.filter(t => item.ticketIds.includes(t.id))}
+                    label="tickets"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Survey Insights ──────────────────────────────── */}
+      {cv.surveyInsights.totalResponses > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Survey Feedback</h3>
+          <p className="text-sm text-gray-400 mb-4">{cv.surveyInsights.totalResponses} responses, avg score {cv.surveyInsights.avgScore}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {cv.surveyInsights.positiveComments.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-green-800 mb-2">Positive Feedback</h4>
+                <div className="space-y-2">
+                  {cv.surveyInsights.positiveComments.map((comment, i) => (
+                    <div key={i} className="bg-green-50 border border-green-200 rounded p-2 text-xs text-green-800 italic">
+                      &quot;{comment}&quot;
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {cv.surveyInsights.negativeComments.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-red-800 mb-2">Negative Feedback</h4>
+                <div className="space-y-2">
+                  {cv.surveyInsights.negativeComments.map((comment, i) => (
+                    <div key={i} className="bg-red-50 border border-red-200 rounded p-2 text-xs text-red-800 italic">
+                      &quot;{comment}&quot;
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {cv.surveyInsights.themes.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">Survey Themes</h4>
+              <div className="flex flex-wrap gap-2">
+                {cv.surveyInsights.themes.map((theme) => (
+                  <span key={theme.theme} className="px-2 py-1 rounded bg-blue-50 text-blue-700 text-xs font-medium">
+                    {theme.theme} ({theme.count})
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Exchange & Return Analysis ───────────────────── */}
+      {(ex.totalExchanges > 0 || ex.totalReturns > 0) && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Exchange & Return Analysis</h3>
+          <p className="text-sm text-gray-400 mb-4">Deep dive into why products come back</p>
+
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-orange-700">{ex.totalExchanges}</p>
+              <p className="text-xs text-orange-600 font-medium">Exchanges</p>
+            </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-red-700">{ex.totalReturns}</p>
+              <p className="text-xs text-red-600 font-medium">Returns</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-gray-700">{ex.exchangeReasons.length}</p>
+              <p className="text-xs text-gray-600 font-medium">Exchange Reasons</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-gray-700">{ex.returnReasons.length}</p>
+              <p className="text-xs text-gray-600 font-medium">Return Reasons</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* By Product */}
+            {(ex.exchangesByProduct.length > 0 || ex.returnsByProduct.length > 0) && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">By Product</h4>
+                {ex.exchangesByProduct.filter(p => p.product !== "Not specified").length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-orange-700 mb-2">Exchanges</p>
+                    <div className="space-y-1">
+                      {ex.exchangesByProduct.filter(p => p.product !== "Not specified").slice(0, 5).map((p) => (
+                        <div key={p.product} className="flex justify-between text-xs">
+                          <span className="text-gray-700 truncate mr-2">{p.product}</span>
+                          <span className="text-gray-500 shrink-0">{p.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {ex.returnsByProduct.filter(p => p.product !== "Not specified").length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-red-700 mb-2">Returns</p>
+                    <div className="space-y-1">
+                      {ex.returnsByProduct.filter(p => p.product !== "Not specified").slice(0, 5).map((p) => (
+                        <div key={p.product} className="flex justify-between text-xs">
+                          <span className="text-gray-700 truncate mr-2">{p.product}</span>
+                          <span className="text-gray-500 shrink-0">{p.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* By Reason */}
+            {(ex.exchangeReasons.length > 0 || ex.returnReasons.length > 0) && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">By Reason</h4>
+                {ex.exchangeReasons.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-orange-700 mb-2">Exchange Reasons</p>
+                    <div className="space-y-2">
+                      {ex.exchangeReasons.map((r) => (
+                        <div key={r.reason} className="border border-orange-100 rounded p-2">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-gray-900">{r.reason}</span>
+                            <span className="text-gray-500">{r.count}</span>
+                          </div>
+                          <TicketDrillDown
+                            tickets={tickets.filter(t => r.ticketIds.includes(t.id))}
+                            label="tickets"
+                            compact
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {ex.returnReasons.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-red-700 mb-2">Return Reasons</p>
+                    <div className="space-y-2">
+                      {ex.returnReasons.map((r) => (
+                        <div key={r.reason} className="border border-red-100 rounded p-2">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-gray-900">{r.reason}</span>
+                            <span className="text-gray-500">{r.count}</span>
+                          </div>
+                          <TicketDrillDown
+                            tickets={tickets.filter(t => r.ticketIds.includes(t.id))}
+                            label="tickets"
+                            compact
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Monthly Trends ───────────────────────────────── */}
+      {monthly.length > 1 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Monthly Trends</h3>
+          <p className="text-sm text-gray-400 mb-4">How your support metrics are changing over time</p>
+
+          {/* Volume chart */}
+          <div className="mb-6">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Ticket Volume</h4>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={monthly}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
+                <Bar dataKey="totalTickets" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Created" />
+                <Bar dataKey="closedTickets" fill="#10b981" radius={[4, 4, 0, 0]} name="Closed" />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Response & Resolution Time Trends */}
+          <div className="mb-6">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Response & Resolution Time</h4>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={monthly}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" label={{ value: "minutes", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "#9ca3af" } }} />
+                <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} formatter={(value) => formatMinutes(Number(value))} />
+                <Line type="monotone" dataKey="avgResponseTime" stroke="#3b82f6" strokeWidth={2} name="Avg Response" dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="avgResolutionTime" stroke="#f59e0b" strokeWidth={2} name="Avg Resolution" dot={{ r: 4 }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Sentiment Trend */}
+          <div className="mb-6">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Sentiment Trend</h4>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={monthly}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
+                <Area type="monotone" dataKey="sentiment.positive" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} name="Positive" />
+                <Area type="monotone" dataKey="sentiment.negative" stroke="#ef4444" fill="#ef4444" fillOpacity={0.15} strokeWidth={2} name="Negative" />
+                <Area type="monotone" dataKey="sentiment.neutral" stroke="#9ca3af" fill="#9ca3af" fillOpacity={0.1} strokeWidth={1} name="Neutral" />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Monthly Details Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="pb-2 text-left text-gray-500 font-medium">Month</th>
+                  <th className="pb-2 text-center text-gray-500 font-medium">Tickets</th>
+                  <th className="pb-2 text-center text-gray-500 font-medium">Closed</th>
+                  <th className="pb-2 text-center text-gray-500 font-medium">Avg Response</th>
+                  <th className="pb-2 text-center text-gray-500 font-medium">Avg Resolution</th>
+                  <th className="pb-2 text-center text-gray-500 font-medium">CSAT</th>
+                  <th className="pb-2 text-left text-gray-500 font-medium">Top Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monthly.map((m) => (
+                  <tr key={m.month} className="border-b border-gray-50">
+                    <td className="py-2 font-medium text-gray-900">{m.label}</td>
+                    <td className="py-2 text-center text-gray-600">{m.totalTickets}</td>
+                    <td className="py-2 text-center text-gray-600">{m.closedTickets}</td>
+                    <td className="py-2 text-center text-gray-600">{formatMinutes(m.avgResponseTime)}</td>
+                    <td className="py-2 text-center text-gray-600">{formatMinutes(m.avgResolutionTime)}</td>
+                    <td className="py-2 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        m.satisfactionScore >= 4.5 ? "bg-green-100 text-green-700"
+                          : m.satisfactionScore >= 4.0 ? "bg-blue-100 text-blue-700"
+                          : m.satisfactionScore > 0 ? "bg-yellow-100 text-yellow-700"
+                          : "bg-gray-100 text-gray-500"
+                      }`}>
+                        {m.satisfactionScore > 0 ? m.satisfactionScore.toFixed(1) : "N/A"}
+                      </span>
+                    </td>
+                    <td className="py-2 text-gray-600 truncate max-w-[120px]">
+                      {m.topContactReasons[0]?.reason || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Intent & Contact Drill-Down ──────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Intent Categories</h3>
-          <p className="text-xs text-gray-400 mb-4">Gorgias shows flat counts — we show structure</p>
+          <p className="text-xs text-gray-400 mb-4">Structured breakdown with sub-categories</p>
           <div className="space-y-3">
             {a.intentBreakdown.slice(0, 10).map((intent) => (
               <div key={intent.category}>
@@ -84,7 +484,7 @@ export default function InsightsPage() {
                   <div className="ml-4 space-y-0.5">
                     {intent.subCategories.slice(0, 4).map((sub) => (
                       <div key={sub.name} className="flex justify-between text-xs text-gray-500">
-                        <span>→ {sub.name}</span>
+                        <span>{sub.name}</span>
                         <span>{sub.count}</span>
                       </div>
                     ))}
@@ -99,7 +499,6 @@ export default function InsightsPage() {
           </div>
         </div>
 
-        {/* Contact Reason Drill-Down */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Contact Reason Details</h3>
           <p className="text-xs text-gray-400 mb-4">With sub-category breakdown</p>
@@ -117,7 +516,7 @@ export default function InsightsPage() {
                   <div className="ml-4 space-y-0.5">
                     {reason.details.slice(0, 4).map((d) => (
                       <div key={d.name} className="flex justify-between text-xs text-gray-500">
-                        <span>→ {d.name}</span>
+                        <span>{d.name}</span>
                         <span>{d.count}</span>
                       </div>
                     ))}
@@ -133,20 +532,23 @@ export default function InsightsPage() {
         </div>
       </div>
 
-      {/* Product Insights */}
+      {/* ─── Product Insights ─────────────────────────────── */}
       {a.productInsights.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Product-Level Insights</h3>
           <p className="text-sm text-gray-400 mb-4">Which products generate the most support tickets</p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {a.productInsights.slice(0, 6).map((product) => (
+            {a.productInsights.slice(0, 9).map((product) => (
               <div key={product.product} className="border rounded-lg p-4">
                 <h4 className="text-sm font-semibold text-gray-900 mb-2 truncate">{product.product}</h4>
                 <p className="text-2xl font-bold text-gray-900 mb-2">{product.totalTickets}</p>
-                <div className="flex gap-2 text-xs mb-3">
+                <div className="flex flex-wrap gap-1.5 text-xs mb-3">
                   <span className="px-2 py-0.5 rounded bg-green-100 text-green-700">+{product.sentiment.positive}</span>
                   <span className="px-2 py-0.5 rounded bg-red-100 text-red-700">-{product.sentiment.negative}</span>
                   <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600">~{product.sentiment.neutral}</span>
+                  {product.exchangeCount > 0 && <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700">{product.exchangeCount} exch</span>}
+                  {product.returnCount > 0 && <span className="px-2 py-0.5 rounded bg-red-100 text-red-700">{product.returnCount} ret</span>}
+                  {product.qualityMentions > 0 && <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">{product.qualityMentions} quality</span>}
                 </div>
                 <div className="space-y-1">
                   {product.topIssues.slice(0, 3).map((issue) => (
@@ -166,7 +568,7 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {/* Sentiment + Tags */}
+      {/* ─── Sentiment + Resolution ───────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {a.emailInsights.sentimentDistribution.length > 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -213,11 +615,11 @@ export default function InsightsPage() {
         )}
       </div>
 
-      {/* Cross-dimensional: Intent × Agent */}
+      {/* ─── Agent × Intent Matrix ────────────────────────── */}
       {a.agentQuality.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Agent × Intent Matrix</h3>
-          <p className="text-sm text-gray-400 mb-4">What types of tickets each agent handles — Gorgias has nothing like this</p>
+          <p className="text-sm text-gray-400 mb-4">What types of tickets each agent handles</p>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
