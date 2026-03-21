@@ -6,8 +6,7 @@ import { useTickets } from "@/lib/ticket-store";
 
 const navItems = [
   { label: "Dashboard", href: "/" },
-  { label: "Insights", href: "/insights" },
-  { label: "Agents", href: "/agents" },
+  { label: "Customer Voice", href: "/insights" },
   { label: "Email Analysis", href: "/email-analysis" },
   { label: "Upload Data", href: "/upload" },
 ];

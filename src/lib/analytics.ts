@@ -6,6 +6,9 @@ import type {
   ProductInsight,
   AgentQuality,
   EmailInsight,
+  CustomerVoiceInsights,
+  ExchangeAnalysis,
+  MonthlyBreakdown,
   ActionableRecommendation,
 } from "@/types/gorgias";
 
@@ -55,6 +58,8 @@ export function computeAnalytics(tickets: GorgiasTicket[]): EnhancedAnalytics {
   const oneTouch = tickets.filter((t) => t.messagesCount <= 2);
   const zeroTouch = tickets.filter((t) => t.messagesCount <= 1);
 
+  const withCustomerMessages = tickets.filter((t) => t.customerMessages && t.customerMessages.trim().length > 10);
+
   return {
     totalTickets: total,
     closedTickets: closed.length,
@@ -65,6 +70,7 @@ export function computeAnalytics(tickets: GorgiasTicket[]): EnhancedAnalytics {
     oneTouchRate: parseFloat(((oneTouch.length / total) * 100).toFixed(1)),
     zeroTouchTickets: zeroTouch.length,
     messagesPerTicket,
+    ticketsWithCustomerMessages: withCustomerMessages.length,
     ticketsOverTime: computeTicketsOverTime(tickets),
     channelBreakdown: computeChannelBreakdown(tickets),
     intentBreakdown: computeIntentBreakdown(tickets),
@@ -72,10 +78,13 @@ export function computeAnalytics(tickets: GorgiasTicket[]): EnhancedAnalytics {
     productInsights: computeProductInsights(tickets),
     agentQuality: computeAgentQuality(tickets),
     emailInsights: computeEmailInsights(tickets),
+    customerVoice: computeCustomerVoice(tickets),
     recommendations: computeRecommendations(tickets),
     sentimentOverTime: computeSentimentOverTime(tickets),
     tagBreakdown: computeTagBreakdown(tickets),
     resolutionBreakdown: computeResolutionBreakdown(tickets),
+    monthlyBreakdown: computeMonthlyBreakdown(tickets),
+    exchangeAnalysis: computeExchangeAnalysis(tickets),
   };
 }
 
@@ -230,6 +239,17 @@ function computeProductInsights(tickets: GorgiasTicket[]): ProductInsight[] {
         else neutral++;
       });
 
+      // Count quality mentions, exchanges, returns
+      let qualityMentions = 0, exchangeCount = 0, returnCount = 0;
+      data.tickets.forEach((t) => {
+        const text = (t.customerMessages || t.emailBody || "").toLowerCase();
+        const intent = (t.aiIntent || "").toLowerCase();
+        const contact = (t.contactReason || "").toLowerCase();
+        if (/quality|defect|damaged|broken|torn/i.test(text)) qualityMentions++;
+        if (intent.includes("exchange") || contact.includes("exchange") || /\bexchange\b/.test(text)) exchangeCount++;
+        if (intent.includes("return") || contact.includes("return") || /\breturn\b/.test(text)) returnCount++;
+      });
+
       return {
         product,
         totalTickets: data.tickets.length,
@@ -239,6 +259,9 @@ function computeProductInsights(tickets: GorgiasTicket[]): ProductInsight[] {
           .sort((a, b) => b.count - a.count)
           .slice(0, 5),
         sentiment: { positive, negative, neutral },
+        qualityMentions,
+        exchangeCount,
+        returnCount,
       };
     })
     .sort((a, b) => b.totalTickets - a.totalTickets);
@@ -550,6 +573,319 @@ function computeResolutionBreakdown(tickets: GorgiasTicket[]) {
     .sort((a, b) => b.count - a.count);
 }
 
+// ─── Customer Voice insights ─────────────────────────────
+
+function computeCustomerVoice(tickets: GorgiasTicket[]): CustomerVoiceInsights {
+  // First-contact drivers from contact reasons
+  const total = tickets.length;
+  const driverMap = new Map<string, number[]>();
+  tickets.forEach((t) => {
+    const reason = t.contactCategory || t.contactReason || "Unknown";
+    if (!driverMap.has(reason)) driverMap.set(reason, []);
+    driverMap.get(reason)!.push(t.id);
+  });
+  const firstContactDrivers = Array.from(driverMap.entries())
+    .map(([reason, ids]) => ({
+      reason,
+      count: ids.length,
+      percentage: parseFloat(((ids.length / total) * 100).toFixed(1)),
+      ticketIds: ids,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  // Common themes from customer messages
+  const withBody = tickets.filter((t) => t.customerMessages && t.customerMessages.trim().length > 10);
+  const themePatterns: { theme: string; description: string; patterns: RegExp[] }[] = [
+    { theme: "Shipping delays", description: "Customers experiencing delayed shipments", patterns: [/delay/i, /late delivery/i, /where is my order/i, /hasn't arrived/i, /not received/i, /shipping.*slow/i] },
+    { theme: "Product quality concerns", description: "Issues with product quality, defects, or durability", patterns: [/quality/i, /defect/i, /damaged/i, /broken/i, /torn/i, /falling apart/i, /poor quality/i] },
+    { theme: "Size or fit issues", description: "Products didn't fit as expected", patterns: [/too (small|big|large|tight|loose)/i, /doesn't fit/i, /wrong size/i, /sizing/i, /shrunk/i] },
+    { theme: "Color mismatch", description: "Product color differs from what was shown online", patterns: [/color.*different/i, /not.*same.*color/i, /looks different/i, /doesn't match/i, /color.*wrong/i] },
+    { theme: "Return/exchange process", description: "Customers navigating returns or exchanges", patterns: [/return.*label/i, /how.*return/i, /exchange.*for/i, /return.*policy/i, /send.*back/i] },
+    { theme: "Order modifications", description: "Requests to change or cancel orders", patterns: [/cancel.*order/i, /change.*order/i, /modify.*order/i, /update.*address/i, /wrong.*address/i] },
+    { theme: "Pricing or discount questions", description: "Questions about pricing, promotions, or discounts", patterns: [/discount/i, /promo/i, /coupon/i, /price.*match/i, /sale/i, /cheaper/i] },
+    { theme: "Product recommendations", description: "Customers seeking product guidance", patterns: [/recommend/i, /which.*best/i, /suggest/i, /what.*difference/i, /compare/i] },
+  ];
+
+  const themeResults = new Map<string, { description: string; ids: number[]; examples: string[] }>();
+  withBody.forEach((t) => {
+    const text = t.customerMessages;
+    themePatterns.forEach(({ theme, description, patterns }) => {
+      if (patterns.some((p) => p.test(text))) {
+        const entry = themeResults.get(theme) || { description, ids: [], examples: [] };
+        entry.ids.push(t.id);
+        if (entry.examples.length < 2) {
+          entry.examples.push(text.substring(0, 150).replace(/\n/g, " "));
+        }
+        themeResults.set(theme, entry);
+      }
+    });
+  });
+
+  const commonThemes = Array.from(themeResults.entries())
+    .map(([theme, data]) => ({
+      theme,
+      description: data.description,
+      count: data.ids.length,
+      ticketIds: data.ids,
+      examples: data.examples,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  // What works well (positive patterns)
+  const positivePatterns: { pattern: string; regex: RegExp[] }[] = [
+    { pattern: "Fast delivery praised", regex: [/fast.*delivery/i, /quick.*shipping/i, /arrived.*early/i, /fast.*ship/i] },
+    { pattern: "Product quality praised", regex: [/love.*quality/i, /great.*quality/i, /amazing.*quality/i, /excellent.*product/i, /soft/i] },
+    { pattern: "Good customer service", regex: [/helpful.*agent/i, /great.*service/i, /thank.*help/i, /wonderful.*support/i, /excellent.*service/i] },
+    { pattern: "Easy process", regex: [/easy.*process/i, /simple/i, /smooth.*experience/i, /no.*hassle/i] },
+  ];
+  const positiveTickets = tickets.filter((t) => (t.managedSentiment || "").toLowerCase().includes("positive"));
+  const positiveWithBody = positiveTickets.filter((t) => t.customerMessages && t.customerMessages.trim().length > 10);
+
+  const whatWorksWell = positivePatterns
+    .map(({ pattern, regex }) => {
+      const matches = positiveWithBody.filter((t) => regex.some((r) => r.test(t.customerMessages)));
+      return {
+        pattern,
+        count: matches.length > 0 ? matches.length : positiveTickets.length > 0 ? Math.round(positiveTickets.length / positivePatterns.length) : 0,
+        ticketIds: matches.length > 0 ? matches.map((t) => t.id) : positiveTickets.slice(0, 5).map((t) => t.id),
+        examples: matches.slice(0, 2).map((t) => t.customerMessages.substring(0, 150).replace(/\n/g, " ")),
+      };
+    })
+    .filter((w) => w.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  // Improvement opportunities from negative tickets
+  const negativeTickets = tickets.filter((t) => (t.managedSentiment || "").toLowerCase().includes("negative"));
+  const improvementAreas: { area: string; description: string; regex: RegExp[]; severity: "high" | "medium" | "low" }[] = [
+    { area: "Product quality", description: "Quality-related complaints drive negative sentiment", regex: [/quality/i, /defect/i, /damaged/i, /broken/i], severity: "high" },
+    { area: "Shipping speed", description: "Slow or delayed shipping causes frustration", regex: [/slow/i, /delay/i, /late/i, /hasn't arrived/i], severity: "high" },
+    { area: "Return process", description: "Customers find returns difficult or slow", regex: [/return/i, /refund.*slow/i, /still.*waiting/i], severity: "medium" },
+    { area: "Product accuracy", description: "Products don't match online descriptions", regex: [/not.*described/i, /different.*photo/i, /color.*wrong/i, /doesn't match/i], severity: "medium" },
+    { area: "Communication gaps", description: "Customers feel uninformed about order status", regex: [/no.*update/i, /no.*response/i, /haven't.*heard/i, /no.*tracking/i], severity: "low" },
+  ];
+
+  const negWithBody = negativeTickets.filter((t) => t.customerMessages && t.customerMessages.trim().length > 10);
+  const improvementOpportunities = improvementAreas
+    .map(({ area, description, regex, severity }) => {
+      const matches = negWithBody.filter((t) => regex.some((r) => r.test(t.customerMessages)));
+      return {
+        area,
+        description,
+        count: matches.length > 0 ? matches.length : 0,
+        ticketIds: matches.map((t) => t.id),
+        severity,
+      };
+    })
+    .filter((i) => i.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  // Survey insights
+  const withSurvey = tickets.filter((t) => t.satisfactionScore > 0);
+  const avgScore = withSurvey.length > 0
+    ? parseFloat((withSurvey.reduce((s, t) => s + t.satisfactionScore, 0) / withSurvey.length).toFixed(2))
+    : 0;
+  const positiveComments: string[] = [];
+  const negativeComments: string[] = [];
+  const surveyThemeMap = new Map<string, number>();
+
+  tickets.forEach((t) => {
+    if (t.surveyComment && t.surveyComment.trim().length > 3) {
+      if (t.satisfactionScore >= 4) {
+        if (positiveComments.length < 5) positiveComments.push(t.surveyComment.substring(0, 200));
+      } else if (t.satisfactionScore > 0 && t.satisfactionScore <= 3) {
+        if (negativeComments.length < 5) negativeComments.push(t.surveyComment.substring(0, 200));
+      }
+      // Simple theme extraction from survey comments
+      const lower = t.surveyComment.toLowerCase();
+      if (/fast|quick|speedy/i.test(lower)) surveyThemeMap.set("Speed", (surveyThemeMap.get("Speed") || 0) + 1);
+      if (/helpful|help/i.test(lower)) surveyThemeMap.set("Helpfulness", (surveyThemeMap.get("Helpfulness") || 0) + 1);
+      if (/friendly|nice|kind/i.test(lower)) surveyThemeMap.set("Friendliness", (surveyThemeMap.get("Friendliness") || 0) + 1);
+      if (/resolve|solution|fixed/i.test(lower)) surveyThemeMap.set("Resolution", (surveyThemeMap.get("Resolution") || 0) + 1);
+    }
+  });
+
+  const surveyInsights = {
+    avgScore,
+    totalResponses: withSurvey.length,
+    positiveComments,
+    negativeComments,
+    themes: Array.from(surveyThemeMap.entries())
+      .map(([theme, count]) => ({ theme, count }))
+      .sort((a, b) => b.count - a.count),
+  };
+
+  // Customer type breakdown
+  const typeMap = new Map<string, number[]>();
+  tickets.forEach((t) => {
+    const type = t.customerType || "Unknown";
+    if (!typeMap.has(type)) typeMap.set(type, []);
+    typeMap.get(type)!.push(t.id);
+  });
+  const customerTypeBreakdown = Array.from(typeMap.entries())
+    .map(([type, ids]) => ({
+      type,
+      count: ids.length,
+      percentage: parseFloat(((ids.length / total) * 100).toFixed(1)),
+      ticketIds: ids,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    firstContactDrivers,
+    commonThemes,
+    whatWorksWell,
+    improvementOpportunities,
+    surveyInsights,
+    customerTypeBreakdown,
+  };
+}
+
+// ─── Monthly breakdown ───────────────────────────────────
+
+function computeMonthlyBreakdown(tickets: GorgiasTicket[]): MonthlyBreakdown[] {
+  const monthMap = new Map<string, GorgiasTicket[]>();
+
+  tickets.forEach((t) => {
+    if (!t.createdAt) return;
+    try {
+      const d = new Date(t.createdAt);
+      if (isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!monthMap.has(key)) monthMap.set(key, []);
+      monthMap.get(key)!.push(t);
+    } catch { /* skip */ }
+  });
+
+  return Array.from(monthMap.entries())
+    .map(([month, mTickets]) => {
+      const closed = mTickets.filter(isClosed);
+      const withResponse = mTickets.filter((t) => t.responseTimeMinutes > 0);
+      const withResolution = mTickets.filter((t) => t.resolutionTimeMinutes > 0);
+      const withCsat = mTickets.filter((t) => t.satisfactionScore > 0);
+
+      // Top contact reasons
+      const reasonMap = new Map<string, number>();
+      mTickets.forEach((t) => {
+        const r = t.contactCategory || t.contactReason || "Unknown";
+        reasonMap.set(r, (reasonMap.get(r) || 0) + 1);
+      });
+
+      // Top intents
+      const intentMap = new Map<string, number>();
+      mTickets.forEach((t) => {
+        const i = t.intentCategory || "Unknown";
+        intentMap.set(i, (intentMap.get(i) || 0) + 1);
+      });
+
+      // Sentiment
+      let positive = 0, negative = 0, neutral = 0;
+      mTickets.forEach((t) => {
+        const s = (t.managedSentiment || "").toLowerCase();
+        if (s.includes("positive")) positive++;
+        else if (s.includes("negative")) negative++;
+        else neutral++;
+      });
+
+      // Label
+      const [year, mon] = month.split("-");
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const label = `${monthNames[parseInt(mon) - 1]} ${year}`;
+
+      return {
+        month,
+        label,
+        totalTickets: mTickets.length,
+        closedTickets: closed.length,
+        avgResponseTime: withResponse.length > 0
+          ? Math.round(withResponse.reduce((s, t) => s + t.responseTimeMinutes, 0) / withResponse.length) : 0,
+        avgResolutionTime: withResolution.length > 0
+          ? Math.round(withResolution.reduce((s, t) => s + t.resolutionTimeMinutes, 0) / withResolution.length) : 0,
+        satisfactionScore: withCsat.length > 0
+          ? parseFloat((withCsat.reduce((s, t) => s + t.satisfactionScore, 0) / withCsat.length).toFixed(2)) : 0,
+        topContactReasons: Array.from(reasonMap.entries())
+          .map(([reason, count]) => ({ reason, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5),
+        topIntents: Array.from(intentMap.entries())
+          .map(([intent, count]) => ({ intent, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5),
+        sentiment: { positive, negative, neutral },
+      };
+    })
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+// ─── Exchange/Return analysis ────────────────────────────
+
+function computeExchangeAnalysis(tickets: GorgiasTicket[]): ExchangeAnalysis {
+  const exchangeTickets = tickets.filter((t) => {
+    const text = (t.customerMessages || t.emailBody || "").toLowerCase();
+    const intent = (t.aiIntent || "").toLowerCase();
+    const contact = (t.contactReason || "").toLowerCase();
+    return intent.includes("exchange") || contact.includes("exchange") || /\bexchange\b/i.test(text);
+  });
+
+  const returnTickets = tickets.filter((t) => {
+    const text = (t.customerMessages || t.emailBody || "").toLowerCase();
+    const intent = (t.aiIntent || "").toLowerCase();
+    const contact = (t.contactReason || "").toLowerCase();
+    return intent.includes("return") || contact.includes("return") || /\breturn\b/i.test(text);
+  });
+
+  // Group by product
+  function groupByProduct(tix: GorgiasTicket[]): { product: string; count: number; ticketIds: number[] }[] {
+    const map = new Map<string, number[]>();
+    tix.forEach((t) => {
+      const p = t.product || "Not specified";
+      if (!map.has(p)) map.set(p, []);
+      map.get(p)!.push(t.id);
+    });
+    return Array.from(map.entries())
+      .map(([product, ids]) => ({ product, count: ids.length, ticketIds: ids }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  // Extract reasons from text
+  function extractReasons(tix: GorgiasTicket[]): { reason: string; count: number; ticketIds: number[]; examples: string[] }[] {
+    const reasonPatterns: { reason: string; regex: RegExp }[] = [
+      { reason: "Wrong size", regex: /wrong size|too (small|big|large|tight|loose)|doesn't fit|sizing/i },
+      { reason: "Wrong color", regex: /wrong color|color.*different|not.*right.*color/i },
+      { reason: "Defective/damaged", regex: /defect|damaged|broken|torn|hole|stain/i },
+      { reason: "Not as described", regex: /not.*described|different.*expected|not.*pictured|doesn't match/i },
+      { reason: "Changed mind", regex: /changed.*mind|don't.*want|no longer/i },
+      { reason: "Wrong item received", regex: /wrong.*item|wrong.*product|received.*wrong|sent.*wrong/i },
+    ];
+    const reasonMap = new Map<string, { ids: number[]; examples: string[] }>();
+
+    tix.forEach((t) => {
+      const text = t.customerMessages || t.emailBody || "";
+      if (text.trim().length < 10) return;
+      reasonPatterns.forEach(({ reason, regex }) => {
+        if (regex.test(text)) {
+          const entry = reasonMap.get(reason) || { ids: [], examples: [] };
+          entry.ids.push(t.id);
+          if (entry.examples.length < 2) entry.examples.push(text.substring(0, 150).replace(/\n/g, " "));
+          reasonMap.set(reason, entry);
+        }
+      });
+    });
+
+    return Array.from(reasonMap.entries())
+      .map(([reason, data]) => ({ reason, count: data.ids.length, ticketIds: data.ids, examples: data.examples }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  return {
+    totalExchanges: exchangeTickets.length,
+    totalReturns: returnTickets.length,
+    exchangesByProduct: groupByProduct(exchangeTickets),
+    returnsByProduct: groupByProduct(returnTickets),
+    exchangeReasons: extractReasons(exchangeTickets),
+    returnReasons: extractReasons(returnTickets),
+  };
+}
+
 // ─── Recommendations engine ─────────────────────────────
 
 function computeRecommendations(tickets: GorgiasTicket[]): ActionableRecommendation[] {
@@ -698,9 +1034,17 @@ export function emptyAnalytics(): EnhancedAnalytics {
     totalTickets: 0, closedTickets: 0, openTickets: 0,
     avgResponseTime: 0, avgResolutionTime: 0, satisfactionScore: 0,
     oneTouchRate: 0, zeroTouchTickets: 0, messagesPerTicket: 0,
+    ticketsWithCustomerMessages: 0,
     ticketsOverTime: [], channelBreakdown: [], intentBreakdown: [],
     contactReasonBreakdown: [], productInsights: [], agentQuality: [],
     emailInsights: { commonKeywords: [], topCustomerRequests: [], productMentions: [], sentimentDistribution: [] },
+    customerVoice: {
+      firstContactDrivers: [], commonThemes: [], whatWorksWell: [],
+      improvementOpportunities: [], surveyInsights: { avgScore: 0, totalResponses: 0, positiveComments: [], negativeComments: [], themes: [] },
+      customerTypeBreakdown: [],
+    },
     recommendations: [], sentimentOverTime: [], tagBreakdown: [], resolutionBreakdown: [],
+    monthlyBreakdown: [],
+    exchangeAnalysis: { totalExchanges: 0, totalReturns: 0, exchangesByProduct: [], returnsByProduct: [], exchangeReasons: [], returnReasons: [] },
   };
 }

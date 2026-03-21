@@ -65,7 +65,7 @@ export default function Dashboard() {
         <StatCard label="Messages/Ticket" value={a.messagesPerTicket.toFixed(1)} small />
         <StatCard label="One-Touch Rate" value={`${a.oneTouchRate}%`} small />
         <StatCard label="Zero-Touch" value={a.zeroTouchTickets.toLocaleString()} small />
-        <StatCard label="With Email Body" value={tickets.filter(t => t.emailBody?.trim().length > 10).length.toLocaleString()} small />
+        <StatCard label="With Messages" value={a.ticketsWithCustomerMessages.toLocaleString()} small />
       </div>
 
       {/* Charts Row 1: Volume + Channel */}
@@ -179,7 +179,6 @@ export default function Dashboard() {
             <h3 className="text-sm font-semibold text-gray-900">Agent Performance</h3>
             <p className="text-xs text-gray-400">Quality metrics beyond speed</p>
           </div>
-          <Link href="/agents" className="text-xs text-blue-600 hover:underline">View details →</Link>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
