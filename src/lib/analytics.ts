@@ -763,11 +763,15 @@ function computeMonthlyBreakdown(tickets: GorgiasTicket[]): MonthlyBreakdown[] {
       const withResolution = mTickets.filter((t) => t.resolutionTimeMinutes > 0);
       const withCsat = mTickets.filter((t) => t.satisfactionScore > 0);
 
-      // Top contact reasons
-      const reasonMap = new Map<string, number>();
+      // Top contact reasons with detail
+      const reasonMap = new Map<string, { count: number; details: Map<string, number> }>();
       mTickets.forEach((t) => {
         const r = t.contactCategory || t.contactReason || "Unknown";
-        reasonMap.set(r, (reasonMap.get(r) || 0) + 1);
+        if (!reasonMap.has(r)) reasonMap.set(r, { count: 0, details: new Map() });
+        const entry = reasonMap.get(r)!;
+        entry.count++;
+        const detail = t.contactDetail || "";
+        if (detail) entry.details.set(detail, (entry.details.get(detail) || 0) + 1);
       });
 
       // Top intents
@@ -791,6 +795,32 @@ function computeMonthlyBreakdown(tickets: GorgiasTicket[]): MonthlyBreakdown[] {
       const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const label = `${monthNames[parseInt(mon) - 1]} ${year}`;
 
+      // Top products this month
+      const productMap = new Map<string, { count: number; positive: number; negative: number; neutral: number; issues: Map<string, number> }>();
+      mTickets.forEach((t) => {
+        const p = t.product || "";
+        if (!p || p === "Not specified") return;
+        if (!productMap.has(p)) productMap.set(p, { count: 0, positive: 0, negative: 0, neutral: 0, issues: new Map() });
+        const entry = productMap.get(p)!;
+        entry.count++;
+        const s = (t.managedSentiment || "").toLowerCase();
+        if (s.includes("positive")) entry.positive++;
+        else if (s.includes("negative")) entry.negative++;
+        else entry.neutral++;
+        const issue = t.contactReason || t.intentCategory || "";
+        if (issue) entry.issues.set(issue, (entry.issues.get(issue) || 0) + 1);
+      });
+
+      // Exchange/return count this month
+      const exchangeReturnCount = mTickets.filter((t) => {
+        const text = (t.customerMessages || t.emailBody || "").toLowerCase();
+        const intent = (t.aiIntent || "").toLowerCase();
+        const contact = (t.contactReason || "").toLowerCase();
+        return intent.includes("exchange") || intent.includes("return") ||
+          contact.includes("exchange") || contact.includes("return") ||
+          /\b(exchange|return)\b/.test(text);
+      }).length;
+
       return {
         month,
         label,
@@ -803,13 +833,29 @@ function computeMonthlyBreakdown(tickets: GorgiasTicket[]): MonthlyBreakdown[] {
         satisfactionScore: withCsat.length > 0
           ? parseFloat((withCsat.reduce((s, t) => s + t.satisfactionScore, 0) / withCsat.length).toFixed(2)) : 0,
         topContactReasons: Array.from(reasonMap.entries())
-          .map(([reason, count]) => ({ reason, count }))
+          .map(([reason, data]) => {
+            const topDetail = Array.from(data.details.entries()).sort((a, b) => b[1] - a[1])[0];
+            return { reason, count: data.count, detail: topDetail ? topDetail[0] : undefined };
+          })
           .sort((a, b) => b.count - a.count)
           .slice(0, 5),
         topIntents: Array.from(intentMap.entries())
           .map(([intent, count]) => ({ intent, count }))
           .sort((a, b) => b.count - a.count)
           .slice(0, 5),
+        topProducts: Array.from(productMap.entries())
+          .map(([product, data]) => {
+            const topIssue = Array.from(data.issues.entries()).sort((a, b) => b[1] - a[1])[0];
+            return {
+              product,
+              count: data.count,
+              sentiment: { positive: data.positive, negative: data.negative, neutral: data.neutral },
+              topIssue: topIssue ? topIssue[0] : "",
+            };
+          })
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5),
+        exchangeReturnCount,
         sentiment: { positive, negative, neutral },
       };
     })
@@ -1044,7 +1090,7 @@ export function emptyAnalytics(): EnhancedAnalytics {
       customerTypeBreakdown: [],
     },
     recommendations: [], sentimentOverTime: [], tagBreakdown: [], resolutionBreakdown: [],
-    monthlyBreakdown: [],
+    monthlyBreakdown: [] as MonthlyBreakdown[],
     exchangeAnalysis: { totalExchanges: 0, totalReturns: 0, exchangesByProduct: [], returnsByProduct: [], exchangeReasons: [], returnReasons: [] },
   };
 }

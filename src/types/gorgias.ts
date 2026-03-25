@@ -139,8 +139,10 @@ export interface MonthlyBreakdown {
   avgResponseTime: number;
   avgResolutionTime: number;
   satisfactionScore: number;
-  topContactReasons: { reason: string; count: number }[];
+  topContactReasons: { reason: string; count: number; detail?: string }[];
   topIntents: { intent: string; count: number }[];
+  topProducts: { product: string; count: number; sentiment: { positive: number; negative: number; neutral: number }; topIssue: string }[];
+  exchangeReturnCount: number;
   sentiment: { positive: number; negative: number; neutral: number };
 }
 

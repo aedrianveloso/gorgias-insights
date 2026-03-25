@@ -257,11 +257,11 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {/* ─── Exchange & Return Analysis ───────────────────── */}
+      {/* ─── Exchange & Return Deep Dive ───────────────────── */}
       {(ex.totalExchanges > 0 || ex.totalReturns > 0) && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">Exchange & Return Analysis</h3>
-          <p className="text-sm text-gray-400 mb-4">Deep dive into why products come back</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Exchange & Return Deep Dive</h3>
+          <p className="text-sm text-gray-400 mb-4">What products come back, why customers ask the first time, and what patterns emerge</p>
 
           {/* Summary cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -273,94 +273,116 @@ export default function InsightsPage() {
               <p className="text-2xl font-bold text-red-700">{ex.totalReturns}</p>
               <p className="text-xs text-red-600 font-medium">Returns</p>
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-gray-700">{ex.exchangeReasons.length}</p>
-              <p className="text-xs text-gray-600 font-medium">Exchange Reasons</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-blue-700">{ex.exchangesByProduct.filter(p => p.product !== "Not specified").length}</p>
+              <p className="text-xs text-blue-600 font-medium">Products Exchanged</p>
             </div>
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold text-gray-700">{ex.returnReasons.length}</p>
-              <p className="text-xs text-gray-600 font-medium">Return Reasons</p>
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold text-purple-700">
+                {a.totalTickets > 0 ? ((((ex.totalExchanges + ex.totalReturns) / a.totalTickets) * 100).toFixed(1)) : 0}%
+              </p>
+              <p className="text-xs text-purple-600 font-medium">of All Tickets</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* By Product */}
-            {(ex.exchangesByProduct.length > 0 || ex.returnsByProduct.length > 0) && (
+          {/* By Product - with sentiment context */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {ex.exchangesByProduct.filter(p => p.product !== "Not specified").length > 0 && (
               <div>
-                <h4 className="text-sm font-medium text-gray-900 mb-3">By Product</h4>
-                {ex.exchangesByProduct.filter(p => p.product !== "Not specified").length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs font-medium text-orange-700 mb-2">Exchanges</p>
-                    <div className="space-y-1">
-                      {ex.exchangesByProduct.filter(p => p.product !== "Not specified").slice(0, 5).map((p) => (
-                        <div key={p.product} className="flex justify-between text-xs">
-                          <span className="text-gray-700 truncate mr-2">{p.product}</span>
-                          <span className="text-gray-500 shrink-0">{p.count}</span>
-                        </div>
-                      ))}
+                <h4 className="text-sm font-medium text-orange-800 mb-3">Products Being Exchanged</h4>
+                <div className="space-y-2">
+                  {ex.exchangesByProduct.filter(p => p.product !== "Not specified").slice(0, 6).map((p) => (
+                    <div key={p.product} className="border border-orange-100 rounded-lg p-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-medium text-gray-900 truncate mr-2">{p.product}</span>
+                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded shrink-0">{p.count} exchanges</span>
+                      </div>
+                      <TicketDrillDown
+                        tickets={tickets.filter(t => p.ticketIds.includes(t.id))}
+                        label="tickets"
+                        compact
+                      />
                     </div>
-                  </div>
-                )}
-                {ex.returnsByProduct.filter(p => p.product !== "Not specified").length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-red-700 mb-2">Returns</p>
-                    <div className="space-y-1">
-                      {ex.returnsByProduct.filter(p => p.product !== "Not specified").slice(0, 5).map((p) => (
-                        <div key={p.product} className="flex justify-between text-xs">
-                          <span className="text-gray-700 truncate mr-2">{p.product}</span>
-                          <span className="text-gray-500 shrink-0">{p.count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* By Reason */}
-            {(ex.exchangeReasons.length > 0 || ex.returnReasons.length > 0) && (
+            {ex.returnsByProduct.filter(p => p.product !== "Not specified").length > 0 && (
               <div>
-                <h4 className="text-sm font-medium text-gray-900 mb-3">By Reason</h4>
-                {ex.exchangeReasons.length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs font-medium text-orange-700 mb-2">Exchange Reasons</p>
-                    <div className="space-y-2">
-                      {ex.exchangeReasons.map((r) => (
-                        <div key={r.reason} className="border border-orange-100 rounded p-2">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="font-medium text-gray-900">{r.reason}</span>
-                            <span className="text-gray-500">{r.count}</span>
-                          </div>
-                          <TicketDrillDown
-                            tickets={tickets.filter(t => r.ticketIds.includes(t.id))}
-                            label="tickets"
-                            compact
-                          />
-                        </div>
-                      ))}
+                <h4 className="text-sm font-medium text-red-800 mb-3">Products Being Returned</h4>
+                <div className="space-y-2">
+                  {ex.returnsByProduct.filter(p => p.product !== "Not specified").slice(0, 6).map((p) => (
+                    <div key={p.product} className="border border-red-100 rounded-lg p-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-medium text-gray-900 truncate mr-2">{p.product}</span>
+                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded shrink-0">{p.count} returns</span>
+                      </div>
+                      <TicketDrillDown
+                        tickets={tickets.filter(t => p.ticketIds.includes(t.id))}
+                        label="tickets"
+                        compact
+                      />
                     </div>
-                  </div>
-                )}
-                {ex.returnReasons.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium text-red-700 mb-2">Return Reasons</p>
-                    <div className="space-y-2">
-                      {ex.returnReasons.map((r) => (
-                        <div key={r.reason} className="border border-red-100 rounded p-2">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="font-medium text-gray-900">{r.reason}</span>
-                            <span className="text-gray-500">{r.count}</span>
-                          </div>
-                          <TicketDrillDown
-                            tickets={tickets.filter(t => r.ticketIds.includes(t.id))}
-                            label="tickets"
-                            compact
-                          />
-                        </div>
-                      ))}
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Why customers ask - reasons with customer quotes */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {ex.exchangeReasons.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Why Customers Exchange</h4>
+                <p className="text-xs text-gray-400 mb-2">First-time reasons detected from customer messages</p>
+                <div className="space-y-3">
+                  {ex.exchangeReasons.map((r) => (
+                    <div key={r.reason} className="border border-orange-100 bg-orange-50/50 rounded-lg p-3">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-medium text-gray-900">{r.reason}</span>
+                        <span className="text-xs bg-orange-200 text-orange-800 px-2 py-0.5 rounded">{r.count}</span>
+                      </div>
+                      {r.examples.length > 0 && (
+                        <p className="text-xs text-gray-500 italic line-clamp-2 mb-2">
+                          &quot;{r.examples[0]}...&quot;
+                        </p>
+                      )}
+                      <TicketDrillDown
+                        tickets={tickets.filter(t => r.ticketIds.includes(t.id))}
+                        label="tickets"
+                        compact
+                      />
                     </div>
-                  </div>
-                )}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {ex.returnReasons.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Why Customers Return</h4>
+                <p className="text-xs text-gray-400 mb-2">Root causes from customer messages</p>
+                <div className="space-y-3">
+                  {ex.returnReasons.map((r) => (
+                    <div key={r.reason} className="border border-red-100 bg-red-50/50 rounded-lg p-3">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-medium text-gray-900">{r.reason}</span>
+                        <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded">{r.count}</span>
+                      </div>
+                      {r.examples.length > 0 && (
+                        <p className="text-xs text-gray-500 italic line-clamp-2 mb-2">
+                          &quot;{r.examples[0]}...&quot;
+                        </p>
+                      )}
+                      <TicketDrillDown
+                        tickets={tickets.filter(t => r.ticketIds.includes(t.id))}
+                        label="tickets"
+                        compact
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -429,22 +451,18 @@ export default function InsightsPage() {
                 <tr className="border-b border-gray-200">
                   <th className="pb-2 text-left text-gray-500 font-medium">Month</th>
                   <th className="pb-2 text-center text-gray-500 font-medium">Tickets</th>
-                  <th className="pb-2 text-center text-gray-500 font-medium">Closed</th>
-                  <th className="pb-2 text-center text-gray-500 font-medium">Avg Response</th>
-                  <th className="pb-2 text-center text-gray-500 font-medium">Avg Resolution</th>
                   <th className="pb-2 text-center text-gray-500 font-medium">CSAT</th>
-                  <th className="pb-2 text-left text-gray-500 font-medium">Top Reason</th>
+                  <th className="pb-2 text-center text-gray-500 font-medium">Exch/Ret</th>
+                  <th className="pb-2 text-left text-gray-500 font-medium">Top Contact Reason</th>
+                  <th className="pb-2 text-left text-gray-500 font-medium">Top Products</th>
                 </tr>
               </thead>
               <tbody>
                 {monthly.map((m) => (
                   <tr key={m.month} className="border-b border-gray-50">
-                    <td className="py-2 font-medium text-gray-900">{m.label}</td>
-                    <td className="py-2 text-center text-gray-600">{m.totalTickets}</td>
-                    <td className="py-2 text-center text-gray-600">{m.closedTickets}</td>
-                    <td className="py-2 text-center text-gray-600">{formatMinutes(m.avgResponseTime)}</td>
-                    <td className="py-2 text-center text-gray-600">{formatMinutes(m.avgResolutionTime)}</td>
-                    <td className="py-2 text-center">
+                    <td className="py-2.5 font-medium text-gray-900">{m.label}</td>
+                    <td className="py-2.5 text-center text-gray-600">{m.totalTickets}</td>
+                    <td className="py-2.5 text-center">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         m.satisfactionScore >= 4.5 ? "bg-green-100 text-green-700"
                           : m.satisfactionScore >= 4.0 ? "bg-blue-100 text-blue-700"
@@ -454,8 +472,32 @@ export default function InsightsPage() {
                         {m.satisfactionScore > 0 ? m.satisfactionScore.toFixed(1) : "N/A"}
                       </span>
                     </td>
-                    <td className="py-2 text-gray-600 truncate max-w-[120px]">
-                      {m.topContactReasons[0]?.reason || "—"}
+                    <td className="py-2.5 text-center">
+                      {m.exchangeReturnCount > 0 ? (
+                        <span className="text-orange-600 font-medium">{m.exchangeReturnCount}</span>
+                      ) : (
+                        <span className="text-gray-400">0</span>
+                      )}
+                    </td>
+                    <td className="py-2.5 text-gray-600">
+                      {m.topContactReasons[0] ? (
+                        <span>
+                          {m.topContactReasons[0].reason} ({m.topContactReasons[0].count})
+                          {m.topContactReasons[0].detail && (
+                            <span className="text-gray-400 ml-1">— {m.topContactReasons[0].detail}</span>
+                          )}
+                        </span>
+                      ) : "—"}
+                    </td>
+                    <td className="py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {m.topProducts.slice(0, 2).map((p) => (
+                          <span key={p.product} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px]">
+                            {p.product} ({p.count})
+                          </span>
+                        ))}
+                        {m.topProducts.length === 0 && <span className="text-gray-400">—</span>}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -615,37 +657,40 @@ export default function InsightsPage() {
         )}
       </div>
 
-      {/* ─── Agent × Intent Matrix ────────────────────────── */}
-      {a.agentQuality.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">Agent × Intent Matrix</h3>
-          <p className="text-sm text-gray-400 mb-4">What types of tickets each agent handles</p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="pb-2 text-left text-gray-500 font-medium">Agent</th>
-                  {a.intentBreakdown.slice(0, 6).map((intent) => (
-                    <th key={intent.category} className="pb-2 text-center text-gray-500 font-medium px-2">{intent.category}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {a.agentQuality.map((agent) => (
-                  <tr key={agent.name} className="border-b border-gray-50">
-                    <td className="py-2 font-medium text-gray-900">{agent.name}</td>
-                    {a.intentBreakdown.slice(0, 6).map((intent) => {
-                      const match = agent.intentBreakdown.find((ib) => ib.intent === intent.category);
-                      return (
-                        <td key={intent.category} className="py-2 text-center text-gray-600">
-                          {match ? match.count : 0}
-                        </td>
-                      );
-                    })}
-                  </tr>
+      {/* ─── Business Opportunities Summary ────────────────── */}
+      {(cv.improvementOpportunities.length > 0 || cv.whatWorksWell.length > 0) && (
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">Business Opportunities Summary</h3>
+          <p className="text-sm text-gray-400 mb-4">What you should keep doing and where to improve</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-sm font-medium text-green-800 mb-2">Keep Doing (Customers Love These)</h4>
+              <div className="space-y-1">
+                {cv.whatWorksWell.slice(0, 4).map((item) => (
+                  <div key={item.pattern} className="flex items-center gap-2 text-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                    <span className="text-gray-700">{item.pattern}</span>
+                    <span className="text-gray-400 shrink-0">({item.count})</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+                {cv.whatWorksWell.length === 0 && <p className="text-xs text-gray-400">Upload more customer messages to detect patterns</p>}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium text-red-800 mb-2">Improve (Top Complaints)</h4>
+              <div className="space-y-1">
+                {cv.improvementOpportunities.slice(0, 4).map((item) => (
+                  <div key={item.area} className="flex items-center gap-2 text-xs">
+                    <span className={`px-1 py-0.5 rounded text-[9px] font-bold uppercase ${SEVERITY_BADGE[item.severity]}`}>
+                      {item.severity}
+                    </span>
+                    <span className="text-gray-700">{item.area}</span>
+                    <span className="text-gray-400 shrink-0">({item.count})</span>
+                  </div>
+                ))}
+                {cv.improvementOpportunities.length === 0 && <p className="text-xs text-gray-400">No major issues detected</p>}
+              </div>
+            </div>
           </div>
         </div>
       )}
