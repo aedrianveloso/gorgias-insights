@@ -53,19 +53,16 @@ export default function Dashboard() {
       </div>
 
       {/* Top Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
         <StatCard label="Total Tickets" value={a.totalTickets.toLocaleString()} />
         <StatCard label="Closed" value={a.closedTickets.toLocaleString()} color="green" />
         <StatCard label="Open" value={a.openTickets.toLocaleString()} color={a.openTickets > 10 ? "red" : "blue"} />
-        <StatCard label="CSAT" value={a.satisfactionScore > 0 ? a.satisfactionScore.toFixed(2) : "N/A"} color="green" />
         <StatCard label="Exchanges" value={ex.totalExchanges.toLocaleString()} color={ex.totalExchanges > 0 ? "orange" : undefined} />
         <StatCard label="Returns" value={ex.totalReturns.toLocaleString()} color={ex.totalReturns > 0 ? "red" : undefined} />
       </div>
 
       {/* Secondary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Avg Response" value={formatMinutes(a.avgResponseTime)} small />
-        <StatCard label="Avg Resolution" value={formatMinutes(a.avgResolutionTime)} small />
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mb-6">
         <StatCard label="One-Touch Rate" value={`${a.oneTouchRate}%`} small />
         <StatCard label="With Messages" value={a.ticketsWithCustomerMessages.toLocaleString()} small />
       </div>
