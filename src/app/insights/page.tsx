@@ -1,11 +1,12 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { useTickets } from "@/lib/ticket-store";
 import Link from "next/link";
 import TicketDrillDown from "@/components/tickets/TicketDrillDown";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
+  PieChart, Pie, Cell, Legend,
 } from "recharts";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6", "#f97316"];
@@ -39,6 +40,58 @@ export default function InsightsPage() {
   const cv = a.customerVoice;
   const ex = a.exchangeAnalysis;
   const monthly = a.monthlyBreakdown;
+
+  // Build month options + ticket-id sets from createdAt
+  const monthOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    tickets.forEach((t) => {
+      if (!t.createdAt) return;
+      const d = new Date(t.createdAt);
+      if (isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      set.set(key, label);
+    });
+    return Array.from(set.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, label]) => ({ key, label }));
+  }, [tickets]);
+
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+
+  const monthTicketIds = useMemo(() => {
+    if (selectedMonth === "all") return null;
+    const ids = new Set<number>();
+    tickets.forEach((t) => {
+      if (!t.createdAt) return;
+      const d = new Date(t.createdAt);
+      if (isNaN(d.getTime())) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (key === selectedMonth) ids.add(t.id);
+    });
+    return ids;
+  }, [tickets, selectedMonth]);
+
+  // Filter helper: intersect ticketIds with selected month set; recompute count
+  function filterByMonth<T extends { ticketIds: number[] }>(items: T[]): (T & { count: number })[] {
+    if (!monthTicketIds) return items as (T & { count: number })[];
+    return items
+      .map((it) => {
+        const ids = it.ticketIds.filter((id) => monthTicketIds.has(id));
+        return { ...it, ticketIds: ids, count: ids.length };
+      })
+      .filter((it) => it.count > 0)
+      .sort((a, b) => b.count - a.count) as (T & { count: number })[];
+  }
+
+  const fixNowImprovements = filterByMonth(cv.improvementOpportunities.filter((i) => i.severity === "high"));
+  const fixNowGaps = filterByMonth(a.knowledgeGaps.filter((g) => g.severity === "high"));
+  const startGaps = filterByMonth(a.knowledgeGaps.filter((g) => g.severity === "medium"));
+  const startImprovements = filterByMonth(cv.improvementOpportunities.filter((i) => i.severity === "medium"));
+  const keepWorks = filterByMonth(cv.whatWorksWell);
+  const filteredReturnsByProduct = filterByMonth(ex.returnsByProduct);
+  const filteredExchangeReasons = filterByMonth(ex.exchangeReasons);
+  const filteredKnowledgeGaps = filterByMonth(a.knowledgeGaps);
 
   return (
     <div>
@@ -78,10 +131,24 @@ export default function InsightsPage() {
 
       {/* ─── Action Plan: START / KEEP / FIX ─────────────── */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-1">Action Plan</h3>
-        <p className="text-sm text-gray-500 mb-4">
-          What to fix now, what to start doing, and what to keep doing consistently
-        </p>
+        <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Action Plan</h3>
+            <p className="text-sm text-gray-500">
+              What to fix now, what to start doing, and what to keep doing consistently
+            </p>
+          </div>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
+          >
+            <option value="all">All months</option>
+            {monthOptions.map((m) => (
+              <option key={m.key} value={m.key}>{m.label}</option>
+            ))}
+          </select>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* FIX NOW — high severity issues */}
           <div className="border border-red-200 bg-red-50 rounded-lg p-4">
@@ -92,31 +159,25 @@ export default function InsightsPage() {
               <span className="text-xs text-red-700">High priority</span>
             </div>
             <ul className="space-y-2 text-sm text-red-900">
-              {cv.improvementOpportunities
-                .filter((i) => i.severity === "high")
-                .slice(0, 5)
-                .map((i) => (
-                  <li key={i.area} className="flex items-start gap-2">
-                    <span className="text-red-600 mt-0.5">●</span>
-                    <span>
-                      <span className="font-semibold">{i.area}</span> — {i.description} ({i.count}{" "}
-                      tickets)
-                    </span>
-                  </li>
-                ))}
-              {a.knowledgeGaps
-                .filter((g) => g.severity === "high")
-                .slice(0, 3)
-                .map((g) => (
-                  <li key={g.topic} className="flex items-start gap-2">
-                    <span className="text-red-600 mt-0.5">●</span>
-                    <span>
-                      <span className="font-semibold">{g.topic}</span> — {g.websiteAction} ({g.count}{" "}
-                      mentions)
-                    </span>
-                  </li>
-                ))}
-              {ex.totalReturns > 0 && ex.returnsByProduct.slice(0, 2).map((p) => (
+              {fixNowImprovements.slice(0, 5).map((i) => (
+                <li key={i.area} className="flex items-start gap-2">
+                  <span className="text-red-600 mt-0.5">●</span>
+                  <span>
+                    <span className="font-semibold">{i.area}</span> — {i.description} ({i.count}{" "}
+                    tickets)
+                  </span>
+                </li>
+              ))}
+              {fixNowGaps.slice(0, 3).map((g) => (
+                <li key={g.topic} className="flex items-start gap-2">
+                  <span className="text-red-600 mt-0.5">●</span>
+                  <span>
+                    <span className="font-semibold">{g.topic}</span> — {g.websiteAction} ({g.count}{" "}
+                    mentions)
+                  </span>
+                </li>
+              ))}
+              {filteredReturnsByProduct.slice(0, 2).map((p) => (
                 <li key={`ret-${p.product}`} className="flex items-start gap-2">
                   <span className="text-red-600 mt-0.5">●</span>
                   <span>
@@ -125,10 +186,9 @@ export default function InsightsPage() {
                   </span>
                 </li>
               ))}
-              {cv.improvementOpportunities.filter((i) => i.severity === "high").length === 0 &&
-                a.knowledgeGaps.filter((g) => g.severity === "high").length === 0 && (
-                  <li className="text-red-700 italic">No high-priority issues detected</li>
-                )}
+              {fixNowImprovements.length === 0 && fixNowGaps.length === 0 && (
+                <li className="text-red-700 italic">No high-priority issues detected</li>
+              )}
             </ul>
           </div>
 
@@ -141,29 +201,23 @@ export default function InsightsPage() {
               <span className="text-xs text-orange-700">Medium priority</span>
             </div>
             <ul className="space-y-2 text-sm text-orange-900">
-              {a.knowledgeGaps
-                .filter((g) => g.severity === "medium")
-                .slice(0, 5)
-                .map((g) => (
-                  <li key={g.topic} className="flex items-start gap-2">
-                    <span className="text-orange-600 mt-0.5">●</span>
-                    <span>
-                      {g.websiteAction} <span className="text-orange-700">({g.count} mentions)</span>
-                    </span>
-                  </li>
-                ))}
-              {cv.improvementOpportunities
-                .filter((i) => i.severity === "medium")
-                .slice(0, 3)
-                .map((i) => (
-                  <li key={i.area} className="flex items-start gap-2">
-                    <span className="text-orange-600 mt-0.5">●</span>
-                    <span>
-                      <span className="font-semibold">{i.area}</span> — {i.description}
-                    </span>
-                  </li>
-                ))}
-              {ex.exchangeReasons.slice(0, 2).map((r, i) => (
+              {startGaps.slice(0, 5).map((g) => (
+                <li key={g.topic} className="flex items-start gap-2">
+                  <span className="text-orange-600 mt-0.5">●</span>
+                  <span>
+                    {g.websiteAction} <span className="text-orange-700">({g.count} mentions)</span>
+                  </span>
+                </li>
+              ))}
+              {startImprovements.slice(0, 3).map((i) => (
+                <li key={i.area} className="flex items-start gap-2">
+                  <span className="text-orange-600 mt-0.5">●</span>
+                  <span>
+                    <span className="font-semibold">{i.area}</span> — {i.description}
+                  </span>
+                </li>
+              ))}
+              {filteredExchangeReasons.slice(0, 2).map((r, i) => (
                 <li key={`ex-${i}`} className="flex items-start gap-2">
                   <span className="text-orange-600 mt-0.5">●</span>
                   <span>
@@ -172,10 +226,9 @@ export default function InsightsPage() {
                   </span>
                 </li>
               ))}
-              {a.knowledgeGaps.length === 0 &&
-                cv.improvementOpportunities.filter((i) => i.severity === "medium").length === 0 && (
-                  <li className="text-orange-700 italic">Nothing pending in this bucket</li>
-                )}
+              {startGaps.length === 0 && startImprovements.length === 0 && filteredExchangeReasons.length === 0 && (
+                <li className="text-orange-700 italic">Nothing pending in this bucket</li>
+              )}
             </ul>
           </div>
 
@@ -188,7 +241,7 @@ export default function InsightsPage() {
               <span className="text-xs text-green-700">Be consistent</span>
             </div>
             <ul className="space-y-2 text-sm text-green-900">
-              {cv.whatWorksWell.slice(0, 5).map((w) => (
+              {keepWorks.slice(0, 5).map((w) => (
                 <li key={w.pattern} className="flex items-start gap-2">
                   <span className="text-green-600 mt-0.5">●</span>
                   <span>
@@ -197,32 +250,18 @@ export default function InsightsPage() {
                   </span>
                 </li>
               ))}
-              {a.productInsights
-                .filter((p) => p.sentiment.positive > p.sentiment.negative * 2 && p.totalTickets >= 5)
-                .slice(0, 3)
-                .map((p) => (
-                  <li key={`prod-${p.product}`} className="flex items-start gap-2">
-                    <span className="text-green-600 mt-0.5">●</span>
-                    <span>
-                      Customers love <span className="font-semibold">{p.product}</span> — keep
-                      stocking & promoting
-                    </span>
-                  </li>
-                ))}
-              {cv.whatWorksWell.length === 0 &&
-                a.productInsights.filter((p) => p.sentiment.positive > p.sentiment.negative * 2)
-                  .length === 0 && (
-                  <li className="text-green-700 italic">
-                    Fill in more email bodies to surface positive patterns
-                  </li>
-                )}
+              {keepWorks.length === 0 && (
+                <li className="text-green-700 italic">
+                  No positive patterns in this period
+                </li>
+              )}
             </ul>
           </div>
         </div>
       </div>
 
       {/* ─── Website Improvement Signals ──────────────────── */}
-      {a.knowledgeGaps.length > 0 && (
+      {filteredKnowledgeGaps.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">
             Website & FAQ Improvement Signals
@@ -231,7 +270,7 @@ export default function InsightsPage() {
             Customer questions that signal specific website / product page improvements
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {a.knowledgeGaps.map((g) => (
+            {filteredKnowledgeGaps.map((g) => (
               <div
                 key={g.topic}
                 className={`border rounded-lg p-3 ${SEVERITY_COLORS[g.severity]}`}
@@ -547,113 +586,6 @@ export default function InsightsPage() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* ─── Monthly Trends ───────────────────────────────── */}
-      {monthly.length > 1 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">Monthly Trends</h3>
-          <p className="text-sm text-gray-400 mb-4">How your support metrics are changing over time</p>
-
-          {/* Volume chart */}
-          <div className="mb-6">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Ticket Volume</h4>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={monthly}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
-                <Bar dataKey="totalTickets" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Created" />
-                <Bar dataKey="closedTickets" fill="#10b981" radius={[4, 4, 0, 0]} name="Closed" />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Response & Resolution Time Trends */}
-          <div className="mb-6">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Response & Resolution Time</h4>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={monthly}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" label={{ value: "minutes", angle: -90, position: "insideLeft", style: { fontSize: 10, fill: "#9ca3af" } }} />
-                <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} formatter={(value) => formatMinutes(Number(value))} />
-                <Line type="monotone" dataKey="avgResponseTime" stroke="#3b82f6" strokeWidth={2} name="Avg Response" dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="avgResolutionTime" stroke="#f59e0b" strokeWidth={2} name="Avg Resolution" dot={{ r: 4 }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Sentiment Trend */}
-          <div className="mb-6">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Sentiment Trend</h4>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={monthly}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
-                <Area type="monotone" dataKey="sentiment.positive" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} name="Positive" />
-                <Area type="monotone" dataKey="sentiment.negative" stroke="#ef4444" fill="#ef4444" fillOpacity={0.15} strokeWidth={2} name="Negative" />
-                <Area type="monotone" dataKey="sentiment.neutral" stroke="#9ca3af" fill="#9ca3af" fillOpacity={0.1} strokeWidth={1} name="Neutral" />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Monthly Details Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="pb-2 text-left text-gray-500 font-medium">Month</th>
-                  <th className="pb-2 text-center text-gray-500 font-medium">Tickets</th>
-                  <th className="pb-2 text-center text-gray-500 font-medium">CSAT</th>
-                  <th className="pb-2 text-center text-gray-500 font-medium">Exch/Ret</th>
-                  <th className="pb-2 text-left text-gray-500 font-medium">Top Products</th>
-                </tr>
-              </thead>
-              <tbody>
-                {monthly.map((m) => (
-                  <tr key={m.month} className="border-b border-gray-50">
-                    <td className="py-2.5 font-medium text-gray-900">{m.label}</td>
-                    <td className="py-2.5 text-center text-gray-600">{m.totalTickets}</td>
-                    <td className="py-2.5 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        m.satisfactionScore >= 4.5 ? "bg-green-100 text-green-700"
-                          : m.satisfactionScore >= 4.0 ? "bg-blue-100 text-blue-700"
-                          : m.satisfactionScore > 0 ? "bg-yellow-100 text-yellow-700"
-                          : "bg-gray-100 text-gray-500"
-                      }`}>
-                        {m.satisfactionScore > 0 ? m.satisfactionScore.toFixed(1) : "N/A"}
-                      </span>
-                    </td>
-                    <td className="py-2.5 text-center">
-                      {m.exchangeReturnCount > 0 ? (
-                        <span className="text-orange-600 font-medium">{m.exchangeReturnCount}</span>
-                      ) : (
-                        <span className="text-gray-400">0</span>
-                      )}
-                    </td>
-                    <td className="py-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        {m.topProducts.slice(0, 2).map((p) => (
-                          <span key={p.product} className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px]">
-                            {p.product} ({p.count})
-                          </span>
-                        ))}
-                        {m.topProducts.length === 0 && <span className="text-gray-400">—</span>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
