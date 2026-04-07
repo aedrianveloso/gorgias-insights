@@ -135,29 +135,6 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Top Contact Reasons */}
-            <div className="bg-white/10 backdrop-blur rounded-lg p-4">
-              <p className="text-xs uppercase text-blue-200 mb-2">Top Reasons They Reached Out</p>
-              {currentMonth.topContactReasons.filter((r) => r.reason && r.reason.toLowerCase() !== "unknown").length > 0 ? (
-                <ul className="space-y-1">
-                  {currentMonth.topContactReasons
-                    .filter((r) => r.reason && r.reason.toLowerCase() !== "unknown")
-                    .slice(0, 4)
-                    .map((r) => (
-                      <li key={r.reason} className="text-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="truncate">{r.reason}</span>
-                          <span className="text-xs ml-2 shrink-0">{r.count}</span>
-                        </div>
-                        {r.detail && <p className="text-xs text-blue-200 truncate">→ {r.detail}</p>}
-                      </li>
-                    ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-blue-200 italic">No tagged reasons this month</p>
-              )}
-            </div>
-
             {/* Exchanges & Returns */}
             <div className="bg-white/10 backdrop-blur rounded-lg p-4">
               <p className="text-xs uppercase text-blue-200 mb-2">Exchanges & Returns</p>
@@ -286,76 +263,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Contact Reasons */}
-      <div className="grid grid-cols-1 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-1">Contact Reasons</h3>
-          <p className="text-xs text-gray-400 mb-4">Why customers reach out</p>
-          {(() => {
-            const filtered = a.contactReasonBreakdown.filter(
-              (r) => r.reason && r.reason.toLowerCase() !== "unknown" && r.reason !== "Not specified"
-            );
-            const unknown = a.contactReasonBreakdown.find(
-              (r) => !r.reason || r.reason.toLowerCase() === "unknown" || r.reason === "Not specified"
-            );
-            return (
-              <>
-                {unknown && unknown.count > 0 && (
-                  <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
-                    <span className="font-semibold">{unknown.count} tickets</span> have no contact
-                    reason tagged in Gorgias ({unknown.percentage}%) — fix in Gorgias for cleaner
-                    reporting.
-                  </div>
-                )}
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={filtered.slice(0, 8)} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis type="number" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-                    <YAxis
-                      type="category"
-                      dataKey="reason"
-                      tick={{ fontSize: 11 }}
-                      stroke="#9ca3af"
-                      width={140}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: "8px",
-                        border: "1px solid #e5e7eb",
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar dataKey="count" fill="#10b981" radius={[0, 4, 4, 0]} name="Tickets" />
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="mt-3 space-y-2">
-                  {filtered.slice(0, 4).map((reason) => (
-                    <div key={reason.reason}>
-                      {reason.details.length > 1 && (
-                        <div className="ml-2 flex flex-wrap gap-1 mb-1">
-                          {reason.details.slice(0, 3).map((d) => (
-                            <span
-                              key={d.name}
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200"
-                            >
-                              {d.name}: {d.count}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <TicketDrillDown
-                        tickets={tickets.filter((t) => reason.ticketIds.includes(t.id))}
-                        label={`${reason.reason} tickets`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </>
-            );
-          })()}
-        </div>
-      </div>
-
       {/* Exchange & Return Snapshot + Product Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Exchange/Return Quick View */}
@@ -483,7 +390,6 @@ export default function Dashboard() {
                   <th className="pb-2 text-center text-gray-500 font-medium">Tickets</th>
                   <th className="pb-2 text-center text-gray-500 font-medium">Exch/Ret</th>
                   <th className="pb-2 text-left text-gray-500 font-medium">Top Products</th>
-                  <th className="pb-2 text-left text-gray-500 font-medium">Top Contact Reason</th>
                 </tr>
               </thead>
               <tbody>
@@ -507,16 +413,6 @@ export default function Dashboard() {
                         ))}
                         {m.topProducts.length === 0 && <span className="text-gray-400">—</span>}
                       </div>
-                    </td>
-                    <td className="py-2.5 text-gray-600">
-                      {m.topContactReasons[0] ? (
-                        <span>
-                          {m.topContactReasons[0].reason}
-                          {m.topContactReasons[0].detail && (
-                            <span className="text-gray-400 ml-1">({m.topContactReasons[0].detail})</span>
-                          )}
-                        </span>
-                      ) : "—"}
                     </td>
                   </tr>
                 ))}

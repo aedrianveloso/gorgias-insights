@@ -264,30 +264,6 @@ export default function InsightsPage() {
 
       {/* ─── First Contact Drivers + Customer Types ─────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {cv.firstContactDrivers.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-1">Why Customers Reach Out</h3>
-            <p className="text-xs text-gray-400 mb-4">First contact drivers by volume</p>
-            <div className="space-y-2">
-              {cv.firstContactDrivers.filter(d => d.reason !== "Unknown").slice(0, 8).map((driver) => (
-                <div key={driver.reason}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-gray-900">{driver.reason}</span>
-                    <span className="text-gray-500">{driver.count} ({driver.percentage}%)</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${driver.percentage}%` }} />
-                  </div>
-                  <TicketDrillDown
-                    tickets={tickets.filter(t => driver.ticketIds.includes(t.id))}
-                    label="tickets"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {cv.customerTypeBreakdown.length > 0 && cv.customerTypeBreakdown.some(c => c.type !== "Unknown") && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-1">Customer Types</h3>
@@ -639,7 +615,6 @@ export default function InsightsPage() {
                   <th className="pb-2 text-center text-gray-500 font-medium">Tickets</th>
                   <th className="pb-2 text-center text-gray-500 font-medium">CSAT</th>
                   <th className="pb-2 text-center text-gray-500 font-medium">Exch/Ret</th>
-                  <th className="pb-2 text-left text-gray-500 font-medium">Top Contact Reason</th>
                   <th className="pb-2 text-left text-gray-500 font-medium">Top Products</th>
                 </tr>
               </thead>
@@ -665,16 +640,6 @@ export default function InsightsPage() {
                         <span className="text-gray-400">0</span>
                       )}
                     </td>
-                    <td className="py-2.5 text-gray-600">
-                      {m.topContactReasons[0] ? (
-                        <span>
-                          {m.topContactReasons[0].reason} ({m.topContactReasons[0].count})
-                          {m.topContactReasons[0].detail && (
-                            <span className="text-gray-400 ml-1">— {m.topContactReasons[0].detail}</span>
-                          )}
-                        </span>
-                      ) : "—"}
-                    </td>
                     <td className="py-2.5">
                       <div className="flex flex-wrap gap-1">
                         {m.topProducts.slice(0, 2).map((p) => (
@@ -693,8 +658,8 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {/* ─── Intent & Contact Drill-Down ──────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      {/* ─── Intent Drill-Down ──────────────────── */}
+      <div className="grid grid-cols-1 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Intent Categories</h3>
           <p className="text-xs text-gray-400 mb-4">Structured breakdown with sub-categories</p>
@@ -727,37 +692,6 @@ export default function InsightsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-1">Contact Reason Details</h3>
-          <p className="text-xs text-gray-400 mb-4">With sub-category breakdown</p>
-          <div className="space-y-3">
-            {a.contactReasonBreakdown.slice(0, 10).map((reason) => (
-              <div key={reason.reason}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span className="font-medium text-gray-900">{reason.reason}</span>
-                  <span className="text-gray-500">{reason.count} ({reason.percentage}%)</span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
-                  <div className="bg-green-500 h-2 rounded-full" style={{ width: `${reason.percentage}%` }} />
-                </div>
-                {reason.details.length > 1 && (
-                  <div className="ml-4 space-y-0.5">
-                    {reason.details.slice(0, 4).map((d) => (
-                      <div key={d.name} className="flex justify-between text-xs text-gray-500">
-                        <span>{d.name}</span>
-                        <span>{d.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <TicketDrillDown
-                  tickets={tickets.filter(t => reason.ticketIds.includes(t.id))}
-                  label="tickets"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* ─── Product Insights ─────────────────────────────── */}
