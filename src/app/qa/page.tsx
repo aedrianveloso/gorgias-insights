@@ -117,62 +117,6 @@ export default function QAPage() {
         )}
       </section>
 
-      {/* Per-agent compliance */}
-      <section className="bg-white rounded-lg border p-6">
-        <h2 className="font-semibold text-lg mb-1">Agent Compliance (Coaching View)</h2>
-        <p className="text-sm text-gray-600 mb-4">
-          Private coaching data — not customer-facing
-        </p>
-        {qa.agentCompliance.filter((a) => a.name !== "Unassigned").length === 0 ? (
-          <p className="text-sm text-gray-500">No agent assignments in this dataset — agent compliance not available.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs uppercase text-gray-500">
-                  <th className="py-2">Agent</th>
-                  <th className="py-2">Audited</th>
-                  <th className="py-2">Avg Score</th>
-                  <th className="py-2">Pass</th>
-                  <th className="py-2">Coaching</th>
-                  <th className="py-2">Immediate</th>
-                  <th className="py-2">Top Violations</th>
-                </tr>
-              </thead>
-              <tbody>
-                {qa.agentCompliance.filter((a) => a.name !== "Unassigned").map((a) => (
-                  <tr key={a.name} className="border-b">
-                    <td className="py-2 font-medium">{a.name}</td>
-                    <td className="py-2">{a.ticketsAudited}</td>
-                    <td className="py-2">
-                      <span
-                        className={`font-semibold ${
-                          a.avgScore >= 85
-                            ? "text-green-700"
-                            : a.avgScore >= 70
-                            ? "text-orange-600"
-                            : "text-red-700"
-                        }`}
-                      >
-                        {a.avgScore}%
-                      </span>
-                    </td>
-                    <td className="py-2 text-green-700">{a.passCount}</td>
-                    <td className="py-2 text-orange-600">{a.coachingCount}</td>
-                    <td className="py-2 text-red-700">{a.immediateCoachingCount}</td>
-                    <td className="py-2 text-xs text-gray-600">
-                      {a.topViolations.length === 0
-                        ? "—"
-                        : a.topViolations.map((v) => `${v.code} (${v.count})`).join(", ")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
       {/* Knowledge gaps / website improvements */}
       <section className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-6">
         <h2 className="font-semibold text-lg mb-1">Website & Knowledge Improvement Signals</h2>
