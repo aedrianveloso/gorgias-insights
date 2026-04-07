@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { useTickets } from "@/lib/ticket-store";
 import Link from "next/link";
 import TicketDrillDown from "@/components/tickets/TicketDrillDown";
@@ -43,9 +44,16 @@ export default function Dashboard() {
   const ex = a.exchangeAnalysis;
   const monthly = a.monthlyBreakdown;
 
-  // This Month at a Glance — pull latest month from monthlyBreakdown
-  const currentMonth = monthly[monthly.length - 1];
-  const prevMonth = monthly.length > 1 ? monthly[monthly.length - 2] : null;
+  // Month picker state — default to latest month
+  const [selectedMonth, setSelectedMonth] = useState<string>(
+    monthly.length > 0 ? monthly[monthly.length - 1].month : ""
+  );
+  const currentMonth = useMemo(
+    () => monthly.find((m) => m.month === selectedMonth) || monthly[monthly.length - 1],
+    [monthly, selectedMonth]
+  );
+  const currentIdx = monthly.findIndex((m) => m.month === currentMonth?.month);
+  const prevMonth = currentIdx > 0 ? monthly[currentIdx - 1] : null;
   const delta = (cur: number, prev: number) => {
     if (!prev) return null;
     const pct = Math.round(((cur - prev) / prev) * 100);
@@ -70,8 +78,24 @@ export default function Dashboard() {
         <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-xl shadow-lg p-6 mb-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-xs uppercase tracking-wide text-blue-200">This Month at a Glance</p>
-              <h3 className="text-2xl font-bold">{currentMonth.label}</h3>
+              <p className="text-xs uppercase tracking-wide text-blue-200">Month at a Glance</p>
+              <div className="flex items-center gap-3">
+                <h3 className="text-2xl font-bold">{currentMonth.label}</h3>
+                <select
+                  value={currentMonth.month}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-white/15 backdrop-blur text-white text-sm rounded px-2 py-1 border border-white/20 hover:bg-white/25"
+                >
+                  {monthly.map((m) => (
+                    <option key={m.month} value={m.month} className="text-gray-900">
+                      {m.label} ({m.totalTickets})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-xs text-blue-200 mt-1">
+                Data range: {monthly[0]?.label} → {monthly[monthly.length - 1]?.label} ({monthly.length} months)
+              </p>
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold">{currentMonth.totalTickets.toLocaleString()}</p>
