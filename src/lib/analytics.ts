@@ -24,6 +24,74 @@ function isClosed(t: GorgiasTicket): boolean {
   return false;
 }
 
+// Combined text from any text field on a ticket — used for fallback NLP
+// when Gorgias-tagged fields (product, contactReason, etc.) are empty
+function getTicketText(t: GorgiasTicket): string {
+  return [t.emailBody, t.customerMessages, t.subject, t.surveyComment]
+    .filter(Boolean)
+    .join("\n");
+}
+
+// Wamsutta product catalog — keyword-based detection from text
+const WAMSUTTA_PRODUCT_CATALOG: { label: string; keywords: string[] }[] = [
+  { label: "Sheet Sets", keywords: ["sheet set", "fitted sheet", "flat sheet", "sheets"] },
+  { label: "Pillowcase Sets", keywords: ["pillowcase", "pillow case"] },
+  { label: "Duvet Sets", keywords: ["duvet"] },
+  { label: "Comforter Sets", keywords: ["comforter"] },
+  { label: "Quilts & Coverlets", keywords: ["quilt", "coverlet"] },
+  { label: "Pillows", keywords: ["pillow ", "down alternative pillow", "latex loft", "bed pillow", "supreme comfort"] },
+  { label: "Euro Shams & Decorative Pillows", keywords: ["euro sham", "decorative pillow", "throw pillow"] },
+  { label: "Bath Towels", keywords: ["bath towel", "towels"] },
+  { label: "Bath Sheets", keywords: ["bath sheet"] },
+  { label: "Hand Towels & Washcloths", keywords: ["hand towel", "washcloth", "wash cloth"] },
+  { label: "Bath Mats & Tubmats", keywords: ["bath mat", "bath rug", "tubmat", "tub mat"] },
+  { label: "Mattress Protectors & Pads", keywords: ["mattress protector", "mattress pad", "mattress topper"] },
+  { label: "Supreme Egyptian Cotton", keywords: ["egyptian cotton", "supreme egyptian", "600 thread", "600tc"] },
+  { label: "Essentials Percale", keywords: ["percale", "essentials percale"] },
+  { label: "Essentials Cotton Sateen", keywords: ["sateen", "essentials cotton", "essentials sateen"] },
+  { label: "Comforters (DA)", keywords: ["down alternative comforter", "all season comforter"] },
+  { label: "Gramercy Collection", keywords: ["gramercy"] },
+  { label: "Soho Collection", keywords: ["soho"] },
+  { label: "Charleston Vine", keywords: ["charleston"] },
+  { label: "Garden Toile", keywords: ["garden toile"] },
+  { label: "Herringbone Stitch", keywords: ["herringbone"] },
+  { label: "Legacy / DreamZone / Supercale", keywords: ["dreamzone", "supercale", "bed bath", "bbb"] },
+];
+
+// Detect product from any text — returns the first matching product label
+function detectProductFromText(text: string): string | null {
+  const lower = text.toLowerCase();
+  for (const { label, keywords } of WAMSUTTA_PRODUCT_CATALOG) {
+    if (keywords.some((kw) => lower.includes(kw))) return label;
+  }
+  return null;
+}
+
+// Detect contact reason from text using common request patterns
+const CONTACT_REASON_PATTERNS: { reason: string; patterns: RegExp[] }[] = [
+  { reason: "Return / Refund", patterns: [/\breturn\b/i, /\brefund\b/i, /money back/i, /send.*back/i] },
+  { reason: "Exchange Request", patterns: [/\bexchange\b/i, /swap.*for/i, /replace.*with/i] },
+  { reason: "Order Status / Shipping", patterns: [/where is my order/i, /tracking/i, /hasn'?t.*ship/i, /not.*arrived/i, /still.*waiting/i, /delivery status/i] },
+  { reason: "Quality / Defect", patterns: [/defect/i, /damaged/i, /\btorn\b/i, /broken/i, /\bhole\b/i, /falling apart/i, /poor quality/i] },
+  { reason: "Wrong Item / Missing", patterns: [/wrong item/i, /wrong.*color/i, /missing.*from/i, /didn'?t receive/i, /not.*ordered/i] },
+  { reason: "Sizing / Fit Question", patterns: [/what size/i, /size question/i, /pocket depth/i, /fit.*mattress/i, /dimensions/i, /how big/i] },
+  { reason: "Product Question", patterns: [/sateen vs|percale vs|difference between/i, /what.*made of/i, /thread count/i, /weave/i, /material question/i] },
+  { reason: "Order Modification / Cancellation", patterns: [/cancel.*order/i, /change.*address/i, /modify.*order/i, /update.*order/i] },
+  { reason: "Discount / Promo", patterns: [/discount code/i, /promo code/i, /coupon/i, /price match/i, /sale price/i] },
+  { reason: "Care Instructions", patterns: [/how.*wash/i, /care instruction/i, /washing instructions/i, /shrink/i, /fabric softener/i] },
+  { reason: "Stock / Availability", patterns: [/in stock/i, /out of stock/i, /restock/i, /when.*available/i, /back in stock/i] },
+  { reason: "Legacy / BBB Inquiry", patterns: [/bed bath/i, /\bbbb\b/i, /dreamzone/i, /supercale/i, /old wamsutta/i] },
+  { reason: "Positive Feedback", patterns: [/love.*product/i, /amazing/i, /thank you so much/i, /\bbest\b.*sheets/i, /highly recommend/i] },
+  { reason: "Complaint / Frustration", patterns: [/disappointed/i, /frustrated/i, /unacceptable/i, /terrible/i, /worst/i] },
+];
+
+function detectContactReasonFromText(text: string): string | null {
+  for (const { reason, patterns } of CONTACT_REASON_PATTERNS) {
+    if (patterns.some((p) => p.test(text))) return reason;
+  }
+  return null;
+}
+
 // ─── Main analytics computation ─────────────────────────
 
 export function computeAnalytics(tickets: GorgiasTicket[]): EnhancedAnalytics {
@@ -221,7 +289,12 @@ function computeProductInsights(tickets: GorgiasTicket[]): ProductInsight[] {
   const map = new Map<string, { tickets: GorgiasTicket[] }>();
 
   tickets.forEach((t) => {
-    const product = t.product || "Not specified";
+    let product = t.product || "";
+    if (!product || product === "Not specified") {
+      const detected = detectProductFromText(getTicketText(t));
+      if (detected) product = detected;
+    }
+    if (!product) product = "Not specified";
     if (!map.has(product)) map.set(product, { tickets: [] });
     map.get(product)!.tickets.push(t);
   });
@@ -579,11 +652,16 @@ function computeResolutionBreakdown(tickets: GorgiasTicket[]) {
 // ─── Customer Voice insights ─────────────────────────────
 
 function computeCustomerVoice(tickets: GorgiasTicket[]): CustomerVoiceInsights {
-  // First-contact drivers from contact reasons
+  // First-contact drivers — use Gorgias tag if present, fallback to text NLP
   const total = tickets.length;
   const driverMap = new Map<string, number[]>();
   tickets.forEach((t) => {
-    const reason = t.contactCategory || t.contactReason || "Unknown";
+    let reason = t.contactCategory || t.contactReason || "";
+    if (!reason || reason.toLowerCase() === "unknown") {
+      const detected = detectContactReasonFromText(getTicketText(t));
+      if (detected) reason = detected;
+    }
+    if (!reason) reason = "Unknown";
     if (!driverMap.has(reason)) driverMap.set(reason, []);
     driverMap.get(reason)!.push(t.id);
   });
@@ -596,8 +674,8 @@ function computeCustomerVoice(tickets: GorgiasTicket[]): CustomerVoiceInsights {
     }))
     .sort((a, b) => b.count - a.count);
 
-  // Common themes from customer messages
-  const withBody = tickets.filter((t) => t.customerMessages && t.customerMessages.trim().length > 10);
+  // Common themes — use any available text (emailBody, customerMessages, subject, surveyComment)
+  const withBody = tickets.filter((t) => getTicketText(t).trim().length > 10);
   const themePatterns: { theme: string; description: string; patterns: RegExp[] }[] = [
     { theme: "Shipping delays", description: "Customers experiencing delayed shipments", patterns: [/delay/i, /late delivery/i, /where is my order/i, /hasn't arrived/i, /not received/i, /shipping.*slow/i] },
     { theme: "Product quality concerns", description: "Issues with product quality, defects, or durability", patterns: [/quality/i, /defect/i, /damaged/i, /broken/i, /torn/i, /falling apart/i, /poor quality/i] },
@@ -611,7 +689,7 @@ function computeCustomerVoice(tickets: GorgiasTicket[]): CustomerVoiceInsights {
 
   const themeResults = new Map<string, { description: string; ids: number[]; examples: string[] }>();
   withBody.forEach((t) => {
-    const text = t.customerMessages;
+    const text = getTicketText(t);
     themePatterns.forEach(({ theme, description, patterns }) => {
       if (patterns.some((p) => p.test(text))) {
         const entry = themeResults.get(theme) || { description, ids: [], examples: [] };
@@ -641,24 +719,37 @@ function computeCustomerVoice(tickets: GorgiasTicket[]): CustomerVoiceInsights {
     { pattern: "Good customer service", regex: [/helpful.*agent/i, /great.*service/i, /thank.*help/i, /wonderful.*support/i, /excellent.*service/i] },
     { pattern: "Easy process", regex: [/easy.*process/i, /simple/i, /smooth.*experience/i, /no.*hassle/i] },
   ];
-  const positiveTickets = tickets.filter((t) => (t.managedSentiment || "").toLowerCase().includes("positive"));
-  const positiveWithBody = positiveTickets.filter((t) => t.customerMessages && t.customerMessages.trim().length > 10);
+  // Tickets with any positive signal — sentiment OR survey score >=4 OR positive text patterns
+  const isPositiveText = (text: string) =>
+    /\b(love|amazing|excellent|wonderful|perfect|best|highly recommend|happy|thrilled|fantastic)\b/i.test(text);
+  const positiveTickets = tickets.filter((t) => {
+    if ((t.managedSentiment || "").toLowerCase().includes("positive")) return true;
+    if (t.satisfactionScore >= 4) return true;
+    return isPositiveText(getTicketText(t));
+  });
+  const positiveWithBody = positiveTickets.filter((t) => getTicketText(t).trim().length > 10);
 
   const whatWorksWell = positivePatterns
     .map(({ pattern, regex }) => {
-      const matches = positiveWithBody.filter((t) => regex.some((r) => r.test(t.customerMessages)));
+      const matches = positiveWithBody.filter((t) => regex.some((r) => r.test(getTicketText(t))));
       return {
         pattern,
-        count: matches.length > 0 ? matches.length : positiveTickets.length > 0 ? Math.round(positiveTickets.length / positivePatterns.length) : 0,
-        ticketIds: matches.length > 0 ? matches.map((t) => t.id) : positiveTickets.slice(0, 5).map((t) => t.id),
-        examples: matches.slice(0, 2).map((t) => t.customerMessages.substring(0, 150).replace(/\n/g, " ")),
+        count: matches.length,
+        ticketIds: matches.map((t) => t.id),
+        examples: matches.slice(0, 2).map((t) => getTicketText(t).substring(0, 150).replace(/\n/g, " ")),
       };
     })
     .filter((w) => w.count > 0)
     .sort((a, b) => b.count - a.count);
 
-  // Improvement opportunities from negative tickets
-  const negativeTickets = tickets.filter((t) => (t.managedSentiment || "").toLowerCase().includes("negative"));
+  // Improvement opportunities — negative sentiment OR negative text patterns OR low CSAT
+  const isNegativeText = (text: string) =>
+    /\b(disappointed|frustrated|terrible|awful|worst|unacceptable|never again|complaint|angry|upset)\b/i.test(text);
+  const negativeTickets = tickets.filter((t) => {
+    if ((t.managedSentiment || "").toLowerCase().includes("negative")) return true;
+    if (t.satisfactionScore > 0 && t.satisfactionScore <= 2) return true;
+    return isNegativeText(getTicketText(t));
+  });
   const improvementAreas: { area: string; description: string; regex: RegExp[]; severity: "high" | "medium" | "low" }[] = [
     { area: "Product quality", description: "Quality-related complaints drive negative sentiment", regex: [/quality/i, /defect/i, /damaged/i, /broken/i], severity: "high" },
     { area: "Shipping speed", description: "Slow or delayed shipping causes frustration", regex: [/slow/i, /delay/i, /late/i, /hasn't arrived/i], severity: "high" },
@@ -667,10 +758,10 @@ function computeCustomerVoice(tickets: GorgiasTicket[]): CustomerVoiceInsights {
     { area: "Communication gaps", description: "Customers feel uninformed about order status", regex: [/no.*update/i, /no.*response/i, /haven't.*heard/i, /no.*tracking/i], severity: "low" },
   ];
 
-  const negWithBody = negativeTickets.filter((t) => t.customerMessages && t.customerMessages.trim().length > 10);
+  const negWithBody = negativeTickets.filter((t) => getTicketText(t).trim().length > 10);
   const improvementOpportunities = improvementAreas
     .map(({ area, description, regex, severity }) => {
-      const matches = negWithBody.filter((t) => regex.some((r) => r.test(t.customerMessages)));
+      const matches = negWithBody.filter((t) => regex.some((r) => r.test(getTicketText(t))));
       return {
         area,
         description,
@@ -766,10 +857,15 @@ function computeMonthlyBreakdown(tickets: GorgiasTicket[]): MonthlyBreakdown[] {
       const withResolution = mTickets.filter((t) => t.resolutionTimeMinutes > 0);
       const withCsat = mTickets.filter((t) => t.satisfactionScore > 0);
 
-      // Top contact reasons with detail
+      // Top contact reasons with detail (falls back to text-based NLP detection)
       const reasonMap = new Map<string, { count: number; details: Map<string, number> }>();
       mTickets.forEach((t) => {
-        const r = t.contactCategory || t.contactReason || "Unknown";
+        let r = t.contactCategory || t.contactReason || "";
+        if (!r || r.toLowerCase() === "unknown") {
+          const detected = detectContactReasonFromText(getTicketText(t));
+          if (detected) r = detected;
+        }
+        if (!r) r = "Unknown";
         if (!reasonMap.has(r)) reasonMap.set(r, { count: 0, details: new Map() });
         const entry = reasonMap.get(r)!;
         entry.count++;
@@ -798,11 +894,15 @@ function computeMonthlyBreakdown(tickets: GorgiasTicket[]): MonthlyBreakdown[] {
       const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const label = `${monthNames[parseInt(mon) - 1]} ${year}`;
 
-      // Top products this month
+      // Top products this month (falls back to text-based detection)
       const productMap = new Map<string, { count: number; positive: number; negative: number; neutral: number; issues: Map<string, number> }>();
       mTickets.forEach((t) => {
-        const p = t.product || "";
-        if (!p || p === "Not specified") return;
+        let p = t.product || "";
+        if (!p || p === "Not specified") {
+          const detected = detectProductFromText(getTicketText(t));
+          if (detected) p = detected;
+        }
+        if (!p) return;
         if (!productMap.has(p)) productMap.set(p, { count: 0, positive: 0, negative: 0, neutral: 0, issues: new Map() });
         const entry = productMap.get(p)!;
         entry.count++;
@@ -810,7 +910,8 @@ function computeMonthlyBreakdown(tickets: GorgiasTicket[]): MonthlyBreakdown[] {
         if (s.includes("positive")) entry.positive++;
         else if (s.includes("negative")) entry.negative++;
         else entry.neutral++;
-        const issue = t.contactReason || t.intentCategory || "";
+        const issue =
+          t.contactReason || t.intentCategory || detectContactReasonFromText(getTicketText(t)) || "";
         if (issue) entry.issues.set(issue, (entry.issues.get(issue) || 0) + 1);
       });
 
