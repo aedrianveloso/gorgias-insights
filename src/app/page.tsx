@@ -62,9 +62,9 @@ export default function Dashboard() {
       </div>
 
       {/* Secondary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-2 gap-4 mb-6">
-        <StatCard label="One-Touch Rate" value={`${a.oneTouchRate}%`} small />
-        <StatCard label="With Messages" value={a.ticketsWithCustomerMessages.toLocaleString()} small />
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <StatCard label="With Customer Messages" value={a.ticketsWithCustomerMessages.toLocaleString()} small />
+        <StatCard label="Unique Products Mentioned" value={a.productInsights.length.toString()} small />
       </div>
 
       {/* Recommendations - Prominent at top */}
