@@ -11,6 +11,7 @@ import type {
   MonthlyBreakdown,
   ActionableRecommendation,
 } from "@/types/gorgias";
+import { computeQACompliance, computeKnowledgeGaps } from "./qa-compliance";
 
 // ─── Helpers for status checks ──────────────────────────
 
@@ -85,6 +86,8 @@ export function computeAnalytics(tickets: GorgiasTicket[]): EnhancedAnalytics {
     resolutionBreakdown: computeResolutionBreakdown(tickets),
     monthlyBreakdown: computeMonthlyBreakdown(tickets),
     exchangeAnalysis: computeExchangeAnalysis(tickets),
+    qaCompliance: computeQACompliance(tickets),
+    knowledgeGaps: computeKnowledgeGaps(tickets),
   };
 }
 
@@ -1092,5 +1095,7 @@ export function emptyAnalytics(): EnhancedAnalytics {
     recommendations: [], sentimentOverTime: [], tagBreakdown: [], resolutionBreakdown: [],
     monthlyBreakdown: [] as MonthlyBreakdown[],
     exchangeAnalysis: { totalExchanges: 0, totalReturns: 0, exchangesByProduct: [], returnsByProduct: [], exchangeReasons: [], returnReasons: [] },
+    qaCompliance: { ticketsAudited: 0, ticketsAuditable: 0, avgComplianceScore: 0, passRate: 0, totalViolations: 0, violations: [], agentCompliance: [], scoreDistribution: [] },
+    knowledgeGaps: [],
   };
 }

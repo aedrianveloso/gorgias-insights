@@ -71,6 +71,49 @@ export interface EnhancedAnalytics {
   resolutionBreakdown: { resolution: string; count: number; percentage: number }[];
   monthlyBreakdown: MonthlyBreakdown[];
   exchangeAnalysis: ExchangeAnalysis;
+  qaCompliance: QACompliance;
+  knowledgeGaps: KnowledgeGap[];
+}
+
+export interface QAViolation {
+  code: string; // e.g. "A1", "C3"
+  section: "A" | "B" | "C" | "D";
+  title: string;
+  description: string;
+  count: number;
+  ticketIds: number[];
+  severity: "high" | "medium" | "low";
+  fix: string;
+}
+
+export interface AgentCompliance {
+  name: string;
+  ticketsAudited: number;
+  avgScore: number; // percentage 0-100
+  passCount: number; // 85+
+  coachingCount: number; // 70-84
+  immediateCoachingCount: number; // <70
+  topViolations: { code: string; title: string; count: number }[];
+}
+
+export interface QACompliance {
+  ticketsAudited: number;
+  ticketsAuditable: number; // tickets that had enough text to audit
+  avgComplianceScore: number; // 0-100
+  passRate: number; // % of tickets at 85%+
+  totalViolations: number;
+  violations: QAViolation[]; // sorted by count desc
+  agentCompliance: AgentCompliance[];
+  scoreDistribution: { band: string; count: number }[]; // pass / coaching / immediate
+}
+
+export interface KnowledgeGap {
+  topic: string;
+  description: string;
+  count: number;
+  ticketIds: number[];
+  websiteAction: string; // suggested website/FAQ improvement
+  severity: "high" | "medium" | "low";
 }
 
 export interface IntentBreakdown {

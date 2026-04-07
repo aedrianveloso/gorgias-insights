@@ -8,6 +8,7 @@ const navItems = [
   { label: "Dashboard", href: "/" },
   { label: "Customer Voice", href: "/insights" },
   { label: "Email Analysis", href: "/email-analysis" },
+  { label: "QA & Compliance", href: "/qa" },
   { label: "Upload Data", href: "/upload" },
 ];
 
