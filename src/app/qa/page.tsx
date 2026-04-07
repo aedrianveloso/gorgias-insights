@@ -123,8 +123,8 @@ export default function QAPage() {
         <p className="text-sm text-gray-600 mb-4">
           Private coaching data — not customer-facing
         </p>
-        {qa.agentCompliance.length === 0 ? (
-          <p className="text-sm text-gray-500">No agent data available.</p>
+        {qa.agentCompliance.filter((a) => a.name !== "Unassigned").length === 0 ? (
+          <p className="text-sm text-gray-500">No agent assignments in this dataset — agent compliance not available.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -140,7 +140,7 @@ export default function QAPage() {
                 </tr>
               </thead>
               <tbody>
-                {qa.agentCompliance.map((a) => (
+                {qa.agentCompliance.filter((a) => a.name !== "Unassigned").map((a) => (
                   <tr key={a.name} className="border-b">
                     <td className="py-2 font-medium">{a.name}</td>
                     <td className="py-2">{a.ticketsAudited}</td>

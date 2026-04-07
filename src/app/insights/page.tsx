@@ -730,37 +730,8 @@ export default function InsightsPage() {
         </div>
       )}
 
-      {/* ─── Sentiment + Resolution ───────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {a.emailInsights.sentimentDistribution.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Sentiment Distribution</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={a.emailInsights.sentimentDistribution.map(s => ({ name: s.sentiment, value: s.count }))}
-                  cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value"
-                >
-                  {a.emailInsights.sentimentDistribution.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="mt-4 space-y-2">
-              {a.emailInsights.sentimentDistribution.map((s) => (
-                <TicketDrillDown
-                  key={s.sentiment}
-                  tickets={tickets.filter(t => s.ticketIds.includes(t.id))}
-                  label={`${s.sentiment} tickets`}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
+      {/* ─── Resolution ───────────────────────── */}
+      <div className="grid grid-cols-1 gap-6 mb-6">
         {a.resolutionBreakdown.length > 0 && a.resolutionBreakdown.some(r => r.resolution !== "Not set") && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-4">Resolution Types</h3>

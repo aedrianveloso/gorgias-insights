@@ -224,12 +224,6 @@ export default function Dashboard() {
         <StatCard label="Returns" value={ex.totalReturns.toLocaleString()} color={ex.totalReturns > 0 ? "red" : undefined} />
       </div>
 
-      {/* Secondary Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <StatCard label="With Customer Messages" value={a.ticketsWithCustomerMessages.toLocaleString()} small />
-        <StatCard label="Unique Products Mentioned" value={a.productInsights.length.toString()} small />
-      </div>
-
       {/* Recommendations - Prominent at top */}
       {a.recommendations.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
@@ -422,88 +416,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Intent + Channel */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-1">What Customers Want</h3>
-          <p className="text-xs text-gray-400 mb-4">AI-detected customer intent</p>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={a.intentBreakdown.slice(0, 8)} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis type="number" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-              <YAxis type="category" dataKey="category" tick={{ fontSize: 11 }} stroke="#9ca3af" width={120} />
-              <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
-              <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} name="Tickets" />
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="mt-4 space-y-2">
-            {a.intentBreakdown.slice(0, 5).map((intent) => (
-              <TicketDrillDown
-                key={intent.category}
-                tickets={tickets.filter(t => intent.ticketIds.includes(t.id))}
-                label={`${intent.category} tickets`}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Tickets by Channel</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={a.channelBreakdown.map(c => ({ name: `${c.channel} (${c.percentage}%)`, value: c.count }))}
-                cx="50%" cy="50%" innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value"
-              >
-                {a.channelBreakdown.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Sentiment Over Time */}
-      {a.sentimentOverTime.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Customer Sentiment Over Time</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={a.sentimentOverTime}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
-              <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
-              <Area type="monotone" dataKey="positive" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeWidth={2} name="Positive" />
-              <Area type="monotone" dataKey="negative" stroke="#ef4444" fill="#ef4444" fillOpacity={0.15} strokeWidth={2} name="Negative" />
-              <Area type="monotone" dataKey="neutral" stroke="#9ca3af" fill="#9ca3af" fillOpacity={0.1} strokeWidth={1} name="Neutral" />
-              <Legend />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Tags */}
-      {a.tagBreakdown.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Top Tags</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {a.tagBreakdown.slice(0, 8).map((tag) => (
-              <div key={tag.tag} className="flex-1">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-700 font-medium truncate mr-1">{tag.tag}</span>
-                  <span className="text-gray-400 shrink-0">{tag.count} ({tag.percentage}%)</span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-1.5">
-                  <div className="bg-blue-500 h-1.5 rounded-full" style={{ width: `${Math.min(tag.percentage * 2, 100)}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
