@@ -100,55 +100,73 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Charts Row 1: Volume + Contact Reasons */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Created vs Closed Tickets</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={a.ticketsOverTime}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" />
-              <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
-              <Area type="monotone" dataKey="created" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.15} strokeWidth={2} name="Created" />
-              <Area type="monotone" dataKey="closed" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.15} strokeWidth={2} name="Closed" />
-              <Legend />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-
+      {/* Contact Reasons */}
+      <div className="grid grid-cols-1 gap-6 mb-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Contact Reasons</h3>
           <p className="text-xs text-gray-400 mb-4">Why customers reach out</p>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={a.contactReasonBreakdown.slice(0, 8)} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis type="number" tick={{ fontSize: 11 }} stroke="#9ca3af" />
-              <YAxis type="category" dataKey="reason" tick={{ fontSize: 11 }} stroke="#9ca3af" width={120} />
-              <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e5e7eb", fontSize: 12 }} />
-              <Bar dataKey="count" fill="#10b981" radius={[0, 4, 4, 0]} name="Tickets" />
-            </BarChart>
-          </ResponsiveContainer>
-          {/* Show sub-details for top reasons */}
-          <div className="mt-3 space-y-2">
-            {a.contactReasonBreakdown.slice(0, 4).map((reason) => (
-              <div key={reason.reason}>
-                {reason.details.length > 1 && (
-                  <div className="ml-2 flex flex-wrap gap-1 mb-1">
-                    {reason.details.slice(0, 3).map((d) => (
-                      <span key={d.name} className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">
-                        {d.name}: {d.count}
-                      </span>
-                    ))}
+          {(() => {
+            const filtered = a.contactReasonBreakdown.filter(
+              (r) => r.reason && r.reason.toLowerCase() !== "unknown" && r.reason !== "Not specified"
+            );
+            const unknown = a.contactReasonBreakdown.find(
+              (r) => !r.reason || r.reason.toLowerCase() === "unknown" || r.reason === "Not specified"
+            );
+            return (
+              <>
+                {unknown && unknown.count > 0 && (
+                  <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                    <span className="font-semibold">{unknown.count} tickets</span> have no contact
+                    reason tagged in Gorgias ({unknown.percentage}%) — fix in Gorgias for cleaner
+                    reporting.
                   </div>
                 )}
-                <TicketDrillDown
-                  tickets={tickets.filter(t => reason.ticketIds.includes(t.id))}
-                  label={`${reason.reason} tickets`}
-                />
-              </div>
-            ))}
-          </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={filtered.slice(0, 8)} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis type="number" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                    <YAxis
+                      type="category"
+                      dataKey="reason"
+                      tick={{ fontSize: 11 }}
+                      stroke="#9ca3af"
+                      width={140}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: "8px",
+                        border: "1px solid #e5e7eb",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar dataKey="count" fill="#10b981" radius={[0, 4, 4, 0]} name="Tickets" />
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="mt-3 space-y-2">
+                  {filtered.slice(0, 4).map((reason) => (
+                    <div key={reason.reason}>
+                      {reason.details.length > 1 && (
+                        <div className="ml-2 flex flex-wrap gap-1 mb-1">
+                          {reason.details.slice(0, 3).map((d) => (
+                            <span
+                              key={d.name}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200"
+                            >
+                              {d.name}: {d.count}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <TicketDrillDown
+                        tickets={tickets.filter((t) => reason.ticketIds.includes(t.id))}
+                        label={`${reason.reason} tickets`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
       </div>
 
