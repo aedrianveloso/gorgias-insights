@@ -76,6 +76,192 @@ export default function InsightsPage() {
         </div>
       )}
 
+      {/* ─── Action Plan: START / KEEP / FIX ─────────────── */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Action Plan</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          What to fix now, what to start doing, and what to keep doing consistently
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* FIX NOW — high severity issues */}
+          <div className="border border-red-200 bg-red-50 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold uppercase bg-red-200 text-red-900 px-2 py-0.5 rounded">
+                Fix Now
+              </span>
+              <span className="text-xs text-red-700">High priority</span>
+            </div>
+            <ul className="space-y-2 text-sm text-red-900">
+              {cv.improvementOpportunities
+                .filter((i) => i.severity === "high")
+                .slice(0, 5)
+                .map((i) => (
+                  <li key={i.area} className="flex items-start gap-2">
+                    <span className="text-red-600 mt-0.5">●</span>
+                    <span>
+                      <span className="font-semibold">{i.area}</span> — {i.description} ({i.count}{" "}
+                      tickets)
+                    </span>
+                  </li>
+                ))}
+              {a.knowledgeGaps
+                .filter((g) => g.severity === "high")
+                .slice(0, 3)
+                .map((g) => (
+                  <li key={g.topic} className="flex items-start gap-2">
+                    <span className="text-red-600 mt-0.5">●</span>
+                    <span>
+                      <span className="font-semibold">{g.topic}</span> — {g.websiteAction} ({g.count}{" "}
+                      mentions)
+                    </span>
+                  </li>
+                ))}
+              {ex.totalReturns > 0 && ex.returnsByProduct.slice(0, 2).map((p) => (
+                <li key={`ret-${p.product}`} className="flex items-start gap-2">
+                  <span className="text-red-600 mt-0.5">●</span>
+                  <span>
+                    Investigate <span className="font-semibold">{p.product}</span> — {p.count}{" "}
+                    returns; check for quality/sizing issues
+                  </span>
+                </li>
+              ))}
+              {cv.improvementOpportunities.filter((i) => i.severity === "high").length === 0 &&
+                a.knowledgeGaps.filter((g) => g.severity === "high").length === 0 && (
+                  <li className="text-red-700 italic">No high-priority issues detected</li>
+                )}
+            </ul>
+          </div>
+
+          {/* START DOING — medium severity + knowledge gaps */}
+          <div className="border border-orange-200 bg-orange-50 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold uppercase bg-orange-200 text-orange-900 px-2 py-0.5 rounded">
+                Start Doing
+              </span>
+              <span className="text-xs text-orange-700">Medium priority</span>
+            </div>
+            <ul className="space-y-2 text-sm text-orange-900">
+              {a.knowledgeGaps
+                .filter((g) => g.severity === "medium")
+                .slice(0, 5)
+                .map((g) => (
+                  <li key={g.topic} className="flex items-start gap-2">
+                    <span className="text-orange-600 mt-0.5">●</span>
+                    <span>
+                      {g.websiteAction} <span className="text-orange-700">({g.count} mentions)</span>
+                    </span>
+                  </li>
+                ))}
+              {cv.improvementOpportunities
+                .filter((i) => i.severity === "medium")
+                .slice(0, 3)
+                .map((i) => (
+                  <li key={i.area} className="flex items-start gap-2">
+                    <span className="text-orange-600 mt-0.5">●</span>
+                    <span>
+                      <span className="font-semibold">{i.area}</span> — {i.description}
+                    </span>
+                  </li>
+                ))}
+              {ex.exchangeReasons.slice(0, 2).map((r, i) => (
+                <li key={`ex-${i}`} className="flex items-start gap-2">
+                  <span className="text-orange-600 mt-0.5">●</span>
+                  <span>
+                    Address top exchange reason:{" "}
+                    <span className="font-semibold">{r.reason}</span> ({r.count} tickets)
+                  </span>
+                </li>
+              ))}
+              {a.knowledgeGaps.length === 0 &&
+                cv.improvementOpportunities.filter((i) => i.severity === "medium").length === 0 && (
+                  <li className="text-orange-700 italic">Nothing pending in this bucket</li>
+                )}
+            </ul>
+          </div>
+
+          {/* KEEP DOING — what's working well */}
+          <div className="border border-green-200 bg-green-50 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold uppercase bg-green-200 text-green-900 px-2 py-0.5 rounded">
+                Keep Doing
+              </span>
+              <span className="text-xs text-green-700">Be consistent</span>
+            </div>
+            <ul className="space-y-2 text-sm text-green-900">
+              {cv.whatWorksWell.slice(0, 5).map((w) => (
+                <li key={w.pattern} className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5">●</span>
+                  <span>
+                    <span className="font-semibold">{w.pattern}</span> — mentioned {w.count}{" "}
+                    times in positive feedback
+                  </span>
+                </li>
+              ))}
+              {a.productInsights
+                .filter((p) => p.sentiment.positive > p.sentiment.negative * 2 && p.totalTickets >= 5)
+                .slice(0, 3)
+                .map((p) => (
+                  <li key={`prod-${p.product}`} className="flex items-start gap-2">
+                    <span className="text-green-600 mt-0.5">●</span>
+                    <span>
+                      Customers love <span className="font-semibold">{p.product}</span> — keep
+                      stocking & promoting
+                    </span>
+                  </li>
+                ))}
+              {cv.whatWorksWell.length === 0 &&
+                a.productInsights.filter((p) => p.sentiment.positive > p.sentiment.negative * 2)
+                  .length === 0 && (
+                  <li className="text-green-700 italic">
+                    Fill in more email bodies to surface positive patterns
+                  </li>
+                )}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Website Improvement Signals ──────────────────── */}
+      {a.knowledgeGaps.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-1">
+            Website & FAQ Improvement Signals
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Customer questions that signal specific website / product page improvements
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {a.knowledgeGaps.map((g) => (
+              <div
+                key={g.topic}
+                className={`border rounded-lg p-3 ${SEVERITY_COLORS[g.severity]}`}
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <h4 className="text-sm font-semibold text-gray-900">{g.topic}</h4>
+                  <span
+                    className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${SEVERITY_BADGE[g.severity]}`}
+                  >
+                    {g.severity}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mb-1">{g.description}</p>
+                <p className="text-xs text-blue-700 mb-2">
+                  <span className="font-semibold">Action:</span> {g.websiteAction}
+                </p>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">{g.count} customer mentions</span>
+                </div>
+                <TicketDrillDown
+                  tickets={tickets.filter((t) => g.ticketIds.includes(t.id))}
+                  label={g.topic}
+                  compact
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ─── First Contact Drivers + Customer Types ─────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {cv.firstContactDrivers.length > 0 && (

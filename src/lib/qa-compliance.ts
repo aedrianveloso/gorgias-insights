@@ -26,83 +26,89 @@ function getAuditText(t: GorgiasTicket): string {
     .join("\n");
 }
 
-function isAuditable(t: GorgiasTicket): boolean {
-  const text = getAuditText(t);
-  return text.trim().length > 50; // need some content to score
+// Agent response text — only emailBody contains both sides of the convo
+// (user manually fills it). Without this we can't audit tone/closing/etc.
+function getAgentText(t: GorgiasTicket): string {
+  return t.emailBody || "";
+}
+
+function hasAgentText(t: GorgiasTicket): boolean {
+  return getAgentText(t).trim().length > 50;
 }
 
 // Run all rule checks against a single ticket. Returns the list of failed rules.
-function runRules(t: GorgiasTicket): RuleResult[] {
+function runRules(t: GorgiasTicket, contactReasonColumnExists: boolean): RuleResult[] {
   const text = getAuditText(t);
+  const agentText = getAgentText(t);
+  const hasAgent = hasAgentText(t);
   const lower = text.toLowerCase();
   const results: RuleResult[] = [];
 
-  // ─── Section A — Writing Style & Tone ───
-  results.push({
-    code: "A1",
-    section: "A",
-    title: "Generic greeting",
-    description: 'Used "Hi Customer" / "Hi there" instead of customer name',
-    severity: "medium",
-    fix: "Always greet customers by their first name",
-    failed: /\b(hi|hello|dear)\s+(customer|there|valued customer|sir\/madam)\b/i.test(text),
-  });
+  // ─── Section A — Writing Style & Tone (only run if we have agent response text) ───
+  if (hasAgent) {
+    results.push({
+      code: "A1",
+      section: "A",
+      title: "Generic greeting",
+      description: 'Used "Hi Customer" / "Hi there" instead of customer name',
+      severity: "medium",
+      fix: "Always greet customers by their first name",
+      failed: /\b(hi|hello|dear)\s+(customer|there|valued customer|sir\/madam)\b/i.test(agentText),
+    });
 
-  results.push({
-    code: "A3",
-    section: "A",
-    title: "Excessive enthusiasm",
-    description: 'Used "We\'re so excited", multiple exclamation marks, or filler phrases',
-    severity: "low",
-    fix: "Keep tone warm but professional — no \"so excited\" or !!! ",
-    failed: /we'?re so excited|!{2,}|super excited|absolutely thrilled/i.test(text),
-  });
+    results.push({
+      code: "A3",
+      section: "A",
+      title: "Excessive enthusiasm",
+      description: 'Used "We\'re so excited", multiple exclamation marks, or filler phrases',
+      severity: "low",
+      fix: 'Keep tone warm but professional — no "so excited" or !!!',
+      failed: /we'?re so excited|!{2,}|super excited|absolutely thrilled/i.test(agentText),
+    });
 
-  results.push({
-    code: "A4",
-    section: "A",
-    title: "Missing standard closing",
-    description: 'Did not end with "Cheers, [Name], Wamsutta Support"',
-    severity: "low",
-    fix: "Always close with the standard sign-off",
-    failed:
-      isAuditable(t) &&
-      !/cheers,?\s*\n?\s*[a-z]+/i.test(text) &&
-      !/wamsutta support/i.test(text),
-  });
+    results.push({
+      code: "A4",
+      section: "A",
+      title: "Missing standard closing",
+      description: 'Did not end with "Cheers, [Name], Wamsutta Support"',
+      severity: "low",
+      fix: "Always close with the standard sign-off",
+      failed:
+        !/cheers,?\s*\n?\s*[a-z]+/i.test(agentText) && !/wamsutta support/i.test(agentText),
+    });
 
-  results.push({
-    code: "A5",
-    section: "A",
-    title: "CAUTION banner left in thread",
-    description: "Email thread still contains the external email warning banner",
-    severity: "high",
-    fix: "Always delete the CAUTION banner before sending",
-    failed: /\bcaution\b.*external|external email|do not click|external sender/i.test(text),
-  });
+    results.push({
+      code: "A5",
+      section: "A",
+      title: "CAUTION banner left in thread",
+      description: "Email thread still contains the external email warning banner",
+      severity: "high",
+      fix: "Always delete the CAUTION banner before sending",
+      failed: /\bcaution\b.*external|external email|do not click|external sender/i.test(agentText),
+    });
 
-  // ─── Section C — Process & Protocol ───
-  results.push({
-    code: "C2",
-    section: "C",
-    title: "Wrong refund/shipping timeframe",
-    description: 'Quoted incorrect timeframe (e.g. "5-7 days" for refunds, "by tomorrow")',
-    severity: "high",
-    fix: 'Refunds = "3-5 business days", Shipping = "1-2 business days"',
-    failed:
-      /\b(5[-–\s]?to?[-–\s]?7|7[-–\s]?to?[-–\s]?10)\s*business\s*days?\b/i.test(text) ||
-      /\b(by tomorrow|asap|immediately|right away)\b/i.test(lower),
-  });
+    results.push({
+      code: "C2",
+      section: "C",
+      title: "Wrong refund/shipping timeframe",
+      description: 'Quoted incorrect timeframe (e.g. "5-7 days" for refunds, "by tomorrow")',
+      severity: "high",
+      fix: 'Refunds = "3-5 business days", Shipping = "1-2 business days"',
+      failed:
+        /\b(5[-–\s]?to?[-–\s]?7|7[-–\s]?to?[-–\s]?10)\s*business\s*days?\b/i.test(agentText) ||
+        /\b(by tomorrow|asap|immediately|right away)\b/i.test(agentText.toLowerCase()),
+    });
 
-  results.push({
-    code: "C3",
-    section: "C",
-    title: "Wrong discount code format",
-    description: 'Used "WAMSUTTA10" or "wamsutta10" instead of "Wamsutta10"',
-    severity: "medium",
-    fix: 'Discount code must be exactly "Wamsutta10" (capital W only)',
-    failed: /\b(WAMSUTTA10|wamsutta10)\b/.test(text) && !/\bWamsutta10\b/.test(text),
-  });
+    results.push({
+      code: "C3",
+      section: "C",
+      title: "Wrong discount code format",
+      description: 'Used "WAMSUTTA10" or "wamsutta10" instead of "Wamsutta10"',
+      severity: "medium",
+      fix: 'Discount code must be exactly "Wamsutta10" (capital W only)',
+      failed: /\b(WAMSUTTA10|wamsutta10)\b/.test(agentText) && !/\bWamsutta10\b/.test(agentText),
+    });
+  }
 
   // C6 — Escalation triggers not handled
   const hasEscalationTrigger =
@@ -122,16 +128,21 @@ function runRules(t: GorgiasTicket): RuleResult[] {
     failed: hasEscalationTrigger && !wasEscalated,
   });
 
-  // C8 — Contact reason missing
-  results.push({
-    code: "C8",
-    section: "C",
-    title: "Missing contact reason",
-    description: "Gorgias contact reason was left blank",
-    severity: "medium",
-    fix: "Always tag a contact reason before closing the ticket",
-    failed: !t.contactReason || t.contactReason.trim() === "" || t.contactReason === "Not specified",
-  });
+  // C8 — Contact reason missing (only if column exists in the export)
+  if (contactReasonColumnExists) {
+    results.push({
+      code: "C8",
+      section: "C",
+      title: "Missing contact reason",
+      description: "Gorgias contact reason was left blank",
+      severity: "medium",
+      fix: "Always tag a contact reason before closing the ticket",
+      failed:
+        !t.contactReason ||
+        t.contactReason.trim() === "" ||
+        t.contactReason === "Not specified",
+    });
+  }
 
   return results;
 }
@@ -242,12 +253,19 @@ export function computeKnowledgeGaps(tickets: GorgiasTicket[]): KnowledgeGap[] {
 
 // ─── Main QA compliance computation ───
 export function computeQACompliance(tickets: GorgiasTicket[]): QACompliance {
-  const auditable = tickets.filter(isAuditable);
+  // Detect whether the contact reason column was actually exported
+  const contactReasonColumnExists = tickets.some(
+    (t) => t.contactReason && t.contactReason.trim().length > 0
+  );
+
+  // Only score tickets where we have agent response text — otherwise the
+  // text-based rules can't run and we'd inflate violation counts
+  const auditable = tickets.filter(hasAgentText);
   const violationMap = new Map<string, QAViolation>();
   const ticketScores: { ticket: GorgiasTicket; score: number; failedCodes: string[] }[] = [];
 
   auditable.forEach((t) => {
-    const results = runRules(t);
+    const results = runRules(t, contactReasonColumnExists);
     const total = results.length;
     const passed = results.filter((r) => !r.failed).length;
     const score = total > 0 ? Math.round((passed / total) * 100) : 100;
